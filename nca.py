@@ -16,7 +16,7 @@ class NCA(t.nn.Module):
     h = w = 72
     c = 16
     p = 3 * 16
-    grow_range = (64, 96)
+    n_steps = 100
     batch_size = 8
     training_iterations = 8001
     EMOJI = '🦎😀💥👁🐠🦋🐞🕸🥨🎄'
@@ -36,29 +36,34 @@ class NCA(t.nn.Module):
                                  [-2.0, 0.0, +2.0],
                                  [-1.0, 0.0, +1.0]], device=self.device).unsqueeze(0).unsqueeze(0).expand((self.c, 1, 3, 3)) / 8.0  # (out, in, h, w)
         self.sobel_y = self.sobel_x.permute(0, 1, 3, 2)
-        self.target = self.load_emoji('🦎').to(self.device)
+        self.targets = self.load_emoji('🦎', range(2, 42, 2))
         self.optim = t.optim.Adam(self.parameters(), lr=2e-3)
         self.to(self.device)
         self.train_writer, self.test_writer = util.get_writers('hierarchical-nca')
         print(self)
 
-    def load_image(self, url):
+    def load_image(self, url, sizes):
         r = requests.get(url)
         img = PIL.Image.open(io.BytesIO(r.content))
-        img.thumbnail((40, 40), PIL.Image.ANTIALIAS)
-        img = np.float32(img) / 255.0
-        # premultiply RGB by Alpha
-        img[..., :3] *= img[..., 3:]
-        # pad to 72, 72
-        img = t.tensor(img).permute(2, 0, 1).sg((4, 40, 40))
-        img = t.nn.functional.pad(img, [16, 16, 16, 16], mode="constant", value=0)
+        targets = []
+        for i in sizes:
+            resized = img.copy()
+            resized.thumbnail((i, i), PIL.Image.ANTIALIAS)
+            resized = np.float32(resized) / 255.0
+            # premultiply RGB by Alpha
+            resized[..., :3] *= resized[..., 3:]
+            # pad to 72, 72
+            resized = t.tensor(resized, device=self.device).permute(2, 0, 1)
+            pad = (72 - i) // 2
+            resized = t.nn.functional.pad(resized, [pad, pad, pad, pad], mode="constant", value=0)
+            targets.append(resized)
 
-        return img
+        return targets
 
-    def load_emoji(self, emoji):
+    def load_emoji(self, emoji, sizes=(40,)):
         code = hex(ord(emoji))[2:].lower()
         url = 'https://github.com/googlefonts/noto-emoji/blob/main/png/128/emoji_u%s.png?raw=true' % code
-        return self.load_image(url)
+        return self.load_image(url, sizes)
 
     def perceive(self, state_grid):
         state_grid.sg(("b", self.c, self.h, self.w))
@@ -93,19 +98,27 @@ class NCA(t.nn.Module):
         alive_mask = pre_alive * post_alive
         return state_grid * alive_mask
 
-    def loss(self, state):
-        return ((state[:, :4] - self.target) ** 2).mean(dim=(1, 2, 3))
+    def loss(self, state, target):
+        return ((state[:, :4] - target) ** 2).mean(dim=(1, 2, 3))
 
     def train_batch(self, state):
         self.optim.zero_grad()
-        for _ in range(random.randint(*self.grow_range)):
-            state = self.step(state)
-        loss = self.loss(state).mean()
+        states = [state]
+        losses = []
+        steps_per_target = self.n_steps // len(self.targets)
+
+        for i in range(self.n_steps):
+            state = self.step(states[-1])
+            target = self.targets[(i // steps_per_target)]
+            losses.append(self.loss(state, target).mean())
+            states.append(state)
+
+        loss = t.stack(losses).mean()
         loss.backward()
         for p in self.parameters():  # grad norm
             p.grad /= (t.norm(p.grad) + 1e-8)
         self.optim.step()
-        return state.detach(), loss.item()
+        return [state.detach() for state in states], loss.item()
 
     def _to_rgb(self, x):
         # assume rgb premultiplied by alpha
@@ -114,6 +127,18 @@ class NCA(t.nn.Module):
         im = 1.0 - a + rgb  # (1-1+0) = 0, (1-0+0) = 1
         im = t.clamp(im, 0, 1)
         return im
+
+    def non_pool_train(self):
+        seed = t.zeros(self.c, self.h, self.w, device=self.device)
+        seed[3:, self.h // 2, self.w // 2] = 1.0  # rgb=0, alpha=1 = black
+        for i in tqdm.tqdm(range(self.training_iterations)):
+            batch = seed.unsqueeze(0)  # just a single batch for now
+            outputs, loss = self.train_batch(batch)  # (steps, 1, C, H, W)
+            outputs = t.cat(outputs, dim=0)
+
+            self.train_writer.add_scalar('log10(loss)', math.log10(loss), i)
+            # self.train_writer.add_images("batch", self._to_rgb(batch), i, dataformats='NCHW')
+            self.train_writer.add_images("outputs", self._to_rgb(outputs), i, dataformats='NCHW')
 
     def pool_training(self):
         # Set alpha and hidden channels to (1.0).
@@ -142,4 +167,4 @@ class NCA(t.nn.Module):
 
 if __name__ == '__main__':
     nca = NCA()
-    nca.pool_training()
+    nca.non_pool_train()
