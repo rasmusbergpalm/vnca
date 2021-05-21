@@ -36,7 +36,7 @@ class NCA(t.nn.Module):
                                  [-2.0, 0.0, +2.0],
                                  [-1.0, 0.0, +1.0]], device=self.device).unsqueeze(0).unsqueeze(0).expand((self.c, 1, 3, 3)) / 8.0  # (out, in, h, w)
         self.sobel_y = self.sobel_x.permute(0, 1, 3, 2)
-        self.targets = self.load_emoji('🦎', range(2, 42, 2))
+        self.targets = self.load_emoji('😀', range(2, 42, 2))
         self.optim = t.optim.Adam(self.parameters(), lr=2e-3)
         self.to(self.device)
         self.train_writer, self.test_writer = util.get_writers('hierarchical-nca')
