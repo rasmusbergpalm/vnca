@@ -13,7 +13,7 @@ import util
 
 
 class NCA(t.nn.Module):
-    h = w = 72
+    h = w = 128
     c = 16
     p = 3 * 16
     n_steps = 100
@@ -54,7 +54,7 @@ class NCA(t.nn.Module):
             resized[..., :3] *= resized[..., 3:]
             # pad to 72, 72
             resized = t.tensor(resized, device=self.device).permute(2, 0, 1)
-            pad = (72 - i) // 2
+            pad = (self.h - i) // 2
             resized = t.nn.functional.pad(resized, [pad, pad, pad, pad], mode="constant", value=0)
             targets.append(resized)
 
@@ -107,10 +107,12 @@ class NCA(t.nn.Module):
         losses = []
         steps_per_target = self.n_steps // len(self.targets)
 
-        for i in range(self.n_steps):
+        for i in range(2 * self.n_steps):
             state = self.step(states[-1])
-            target = self.targets[(i // steps_per_target)]
-            losses.append(self.loss(state, target).mean())
+            target_idx = (i // steps_per_target)
+            if target_idx < len(self.targets):
+                target = self.targets[target_idx]
+                losses.append(self.loss(state, target).mean())
             states.append(state)
 
         loss = t.stack(losses).mean()
