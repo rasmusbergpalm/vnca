@@ -14,9 +14,10 @@ import util
 
 class NCA(t.nn.Module):
     h = w = 128
+    n_levels = 6
+    steps_per_level = 8
     c = 16
     p = 3 * 16
-    n_steps = 100
     batch_size = 8
     training_iterations = 8001
     EMOJI = '🦎😀💥👁🐠🦋🐞🕸🥨🎄'
@@ -36,34 +37,32 @@ class NCA(t.nn.Module):
                                  [-2.0, 0.0, +2.0],
                                  [-1.0, 0.0, +1.0]], device=self.device).unsqueeze(0).unsqueeze(0).expand((self.c, 1, 3, 3)) / 8.0  # (out, in, h, w)
         self.sobel_y = self.sobel_x.permute(0, 1, 3, 2)
-        self.targets = self.load_emoji('😀', range(2, 42, 2))
+        self.target = self.load_emoji('😀', 64)
         self.optim = t.optim.Adam(self.parameters(), lr=2e-3)
         self.to(self.device)
         self.train_writer, self.test_writer = util.get_writers('hierarchical-nca')
         print(self)
 
-    def load_image(self, url, sizes):
+    def load_image(self, url, size):
         r = requests.get(url)
         img = PIL.Image.open(io.BytesIO(r.content))
-        targets = []
-        for i in sizes:
-            resized = img.copy()
-            resized.thumbnail((i, i), PIL.Image.ANTIALIAS)
-            resized = np.float32(resized) / 255.0
-            # premultiply RGB by Alpha
-            resized[..., :3] *= resized[..., 3:]
-            # pad to 72, 72
-            resized = t.tensor(resized, device=self.device).permute(2, 0, 1)
-            pad = (self.h - i) // 2
-            resized = t.nn.functional.pad(resized, [pad, pad, pad, pad], mode="constant", value=0)
-            targets.append(resized)
 
-        return targets
+        resized = img.copy()
+        resized.thumbnail((size, size), PIL.Image.ANTIALIAS)
+        resized = np.float32(resized) / 255.0
+        # premultiply RGB by Alpha
+        resized[..., :3] *= resized[..., 3:]
+        # pad to 72, 72
+        resized = t.tensor(resized, device=self.device).permute(2, 0, 1)
+        pad = (self.h - size) // 2
+        resized = t.nn.functional.pad(resized, [pad, pad, pad, pad], mode="constant", value=0)
 
-    def load_emoji(self, emoji, sizes=(40,)):
+        return resized
+
+    def load_emoji(self, emoji, size):
         code = hex(ord(emoji))[2:].lower()
         url = 'https://github.com/googlefonts/noto-emoji/blob/main/png/128/emoji_u%s.png?raw=true' % code
-        return self.load_image(url, sizes)
+        return self.load_image(url, size)
 
     def perceive(self, state_grid):
         state_grid.sg(("b", self.c, self.h, self.w))
@@ -102,19 +101,19 @@ class NCA(t.nn.Module):
         return ((state[:, :4] - target) ** 2).mean(dim=(1, 2, 3))
 
     def train_batch(self, state):
+        # (b, c, h, w)
         self.optim.zero_grad()
         states = [state]
         losses = []
-        steps_per_target = self.n_steps // len(self.targets)
 
-        for i in range(2 * self.n_steps):
-            state = self.step(states[-1])
-            target_idx = (i // steps_per_target)
-            if target_idx < len(self.targets):
-                target = self.targets[target_idx]
-                losses.append(self.loss(state, target).mean())
-            states.append(state)
+        for i in range(self.n_levels):
+            state = t.repeat_interleave(t.repeat_interleave(state, 2, dim=2), 2, dim=3)  # cell division
+            state = state[:, :, self.h // 2: self.h // 2 + self.h, self.w // 2: self.w // 2 + self.w]  # cut out middle (h, w)
+            for j in range(self.steps_per_level):
+                states.append(state)
+                state = self.step(state)
 
+        losses.append(self.loss(state, self.target).mean())
         loss = t.stack(losses).mean()
         loss.backward()
         for p in self.parameters():  # grad norm
