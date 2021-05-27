@@ -14,8 +14,8 @@ import util
 
 class NCA(t.nn.Module):
     h = w = 128
-    n_levels = 6
-    steps_per_level = 8
+    n_duplications = 5  # 2, (4, 8, 16, 32, 64)
+    steps_per_duplication = 8
     c = 16
     p = 3 * 16
     batch_size = 8
@@ -37,7 +37,7 @@ class NCA(t.nn.Module):
                                  [-2.0, 0.0, +2.0],
                                  [-1.0, 0.0, +1.0]], device=self.device).unsqueeze(0).unsqueeze(0).expand((self.c, 1, 3, 3)) / 8.0  # (out, in, h, w)
         self.sobel_y = self.sobel_x.permute(0, 1, 3, 2)
-        self.target = self.load_emoji('😀', 64)
+        self.target = self.load_emoji('😀', 2 ** (self.n_duplications + 1))
         self.optim = t.optim.Adam(self.parameters(), lr=2e-3)
         self.to(self.device)
         self.train_writer, self.test_writer = util.get_writers('hierarchical-nca')
@@ -104,17 +104,20 @@ class NCA(t.nn.Module):
         # (b, c, h, w)
         self.optim.zero_grad()
         states = [state]
-        losses = []
 
-        for i in range(self.n_levels):
+        for j in range(self.steps_per_duplication):
+            state = self.step(state)
+            states.append(state)
+
+        for i in range(self.n_duplications):
             state = t.repeat_interleave(t.repeat_interleave(state, 2, dim=2), 2, dim=3)  # cell division
             state = state[:, :, self.h // 2: self.h // 2 + self.h, self.w // 2: self.w // 2 + self.w]  # cut out middle (h, w)
-            for j in range(self.steps_per_level):
-                states.append(state)
+            states.append(state)
+            for j in range(self.steps_per_duplication):
                 state = self.step(state)
+                states.append(state)
 
-        losses.append(self.loss(state, self.target).mean())
-        loss = t.stack(losses).mean()
+        loss = self.loss(state, self.target).mean()
         loss.backward()
         for p in self.parameters():  # grad norm
             p.grad /= (t.norm(p.grad) + 1e-8)
@@ -131,7 +134,7 @@ class NCA(t.nn.Module):
 
     def non_pool_train(self):
         seed = t.zeros(self.c, self.h, self.w, device=self.device)
-        seed[3:, self.h // 2, self.w // 2] = 1.0  # rgb=0, alpha=1 = black
+        seed[3:, self.h // 2 - 1:self.h // 2 + 1, self.w // 2 - 1:self.w // 2 + 1] = 1.0  # the middle 2x2
         for i in tqdm.tqdm(range(self.training_iterations)):
             batch = seed.unsqueeze(0)  # just a single batch for now
             outputs, loss = self.train_batch(batch)  # (steps, 1, C, H, W)
