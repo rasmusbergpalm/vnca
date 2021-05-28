@@ -9,6 +9,8 @@ import torch as t
 import tqdm
 
 import shapeguard
+from torchvision import transforms
+
 import util
 
 
@@ -138,11 +140,21 @@ class NCA(t.nn.Module):
         for i in tqdm.tqdm(range(self.training_iterations)):
             batch = seed.unsqueeze(0)  # just a single batch for now
             outputs, loss = self.train_batch(batch)  # (steps, 1, C, H, W)
-            outputs = t.cat(outputs, dim=0)
+            outputs = t.cat(outputs, dim=0)  # (steps, C, H, W)
+            zoomed = t.zeros_like(outputs)
+
+            for j in range(self.n_duplications + 1):
+                # 0-8, 9-17, 18-26, ...
+                level = outputs[j * 9:(j + 1) * 9, :, :, :]
+                center_crop_zoom = transforms.Compose([
+                    transforms.CenterCrop(2 ** (j + 2)),  # 4, 8, 16, ..., 128
+                    transforms.Resize(128, interpolation=transforms.InterpolationMode.NEAREST),
+                ])
+                zoomed[j * 9:(j + 1) * 9, :, :, :] = center_crop_zoom(level)
 
             self.train_writer.add_scalar('log10(loss)', math.log10(loss), i)
-            # self.train_writer.add_images("batch", self._to_rgb(batch), i, dataformats='NCHW')
             self.train_writer.add_images("outputs", self._to_rgb(outputs), i, dataformats='NCHW')
+            self.train_writer.add_images("zoomed", self._to_rgb(zoomed), i, dataformats='NCHW')
 
     def pool_training(self):
         # Set alpha and hidden channels to (1.0).
