@@ -118,8 +118,9 @@ class NCA(t.nn.Module):
             for j in range(self.steps_per_duplication):
                 state = self.step(state)
                 states.append(state)
+            if i == 3:
+                loss = self.loss(state, self.target).mean()
 
-        loss = self.loss(state, self.target).mean()
         loss.backward()
         for p in self.parameters():  # grad norm
             p.grad /= (t.norm(p.grad) + 1e-8)
