@@ -39,7 +39,7 @@ class NCA(t.nn.Module):
                                  [-2.0, 0.0, +2.0],
                                  [-1.0, 0.0, +1.0]], device=self.device).unsqueeze(0).unsqueeze(0).expand((self.c, 1, 3, 3)) / 8.0  # (out, in, h, w)
         self.sobel_y = self.sobel_x.permute(0, 1, 3, 2)
-        self.target = self.load_emoji('😀', 32)
+        self.target = self.load_emoji('🦎', 2 ** (self.n_duplications + 1))
         self.optim = t.optim.Adam(self.parameters(), lr=2e-3)
         self.to(self.device)
         self.train_writer, self.test_writer = util.get_writers('hierarchical-nca')
@@ -118,9 +118,8 @@ class NCA(t.nn.Module):
             for j in range(self.steps_per_duplication):
                 state = self.step(state)
                 states.append(state)
-            if i == 3:
-                loss = self.loss(state, self.target).mean()
 
+        loss = self.loss(state, self.target).mean()
         loss.backward()
         for p in self.parameters():  # grad norm
             p.grad /= (t.norm(p.grad) + 1e-8)
