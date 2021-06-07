@@ -80,7 +80,7 @@ class Model(nn.Module):
                 x, y = next(self.test_loader)
                 batch_loss, z, p_x_given_z = self.forward(x, self.test_samples, self.test_loss_fn)
                 loss = loss + batch_loss
-            loss = loss / 10
+            loss = loss / 100
             self.report(self.test_writer, loss)
 
     def _plot_samples(self):
