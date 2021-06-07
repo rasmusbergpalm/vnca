@@ -19,8 +19,8 @@ class Model(nn.Module):
     def __init__(self):
         super(Model, self).__init__()
         self.z_size = 16
-        self.train_samples = 1
-        self.train_loss_fn = self.elbo_loss_function
+        self.train_samples = 16
+        self.train_loss_fn = self.iwae_loss_fn
         self.test_loss_fn = self.iwae_loss_fn
 
         batch_size = 256
@@ -81,7 +81,7 @@ class Model(nn.Module):
             # grid = self.decode(grid).mean.view(64, 1, 28, 28).cpu().detach().numpy()
 
             samples = self.p_z.sample((64, 1)).to(self.device)
-            samples = self.decode(samples).mean.view(64, 1, 28, 28).cpu().detach().numpy()
+            samples = Binomial(self.decode(samples)).sample().view(64, 1, 28, 28).cpu().detach().numpy()
 
         return samples
 
