@@ -23,7 +23,8 @@ class Model(nn.Module):
         self.train_loss_fn = self.elbo_loss_function
         self.test_loss_fn = self.iwae_loss_fn
 
-        batch_size = 1000
+        batch_size = 60_000
+        test_batch_size = 100
         self.hidden_size = 512
         self.test_samples = 1024
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -46,7 +47,7 @@ class Model(nn.Module):
 
         data_dir = os.environ.get('DATA_DIR') or "."
         self.train_loader = iter(DataLoader(IterableWrapper(datasets.MNIST(data_dir, train=True, download=True, transform=transforms.ToTensor())), batch_size=batch_size, pin_memory=True))
-        self.test_loader = iter(DataLoader(IterableWrapper(datasets.MNIST(data_dir, train=False, transform=transforms.ToTensor())), batch_size=batch_size, pin_memory=True))
+        self.test_loader = iter(DataLoader(IterableWrapper(datasets.MNIST(data_dir, train=False, transform=transforms.ToTensor())), batch_size=test_batch_size, pin_memory=True))
         self.train_writer, self.test_writer = get_writers("hierarchical-nca")
 
         print(self)
@@ -59,12 +60,8 @@ class Model(nn.Module):
 
         def closure():
             self.optimizer.zero_grad()
-            loss = 0
-            for _ in range(60):
-                x, y = next(self.train_loader)
-                batch_loss, z, p_x_given_z = self.forward(x, self.train_samples, self.train_loss_fn)
-                loss = loss + batch_loss
-            loss = loss / 60
+            x, y = next(self.train_loader)
+            loss, z, p_x_given_z = self.forward(x, self.train_samples, self.train_loss_fn)
             loss.backward()
             return loss
 
@@ -79,7 +76,7 @@ class Model(nn.Module):
         self.train(False)
         with t.no_grad():
             loss = 0
-            for _ in range(10):
+            for _ in range(100):
                 x, y = next(self.test_loader)
                 batch_loss, z, p_x_given_z = self.forward(x, self.test_samples, self.test_loss_fn)
                 loss = loss + batch_loss
