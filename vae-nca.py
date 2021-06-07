@@ -81,7 +81,7 @@ class Model(nn.Module):
             # grid = self.decode(grid).mean.view(64, 1, 28, 28).cpu().detach().numpy()
 
             samples = self.p_z.sample((64, 1)).to(self.device)
-            samples = Binomial(self.decode(samples)).sample().view(64, 1, 28, 28).cpu().detach().numpy()
+            samples = self.decode(samples).sample().view(64, 1, 28, 28).cpu().detach().numpy()
 
         return samples
 
