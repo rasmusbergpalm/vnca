@@ -66,7 +66,7 @@ class Model(nn.Module):
         loss.backward()
         # return loss
 
-        # loss = self.optimizer.step(closure)
+        self.optimizer.step()
 
         # if self.batch_idx % 100 == 0:
         self.report(self.train_writer, loss)
