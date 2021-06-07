@@ -53,7 +53,7 @@ class Model(nn.Module):
         print(self)
         self.to(self.device)
         # self.optimizer = optim.LBFGS(self.parameters(), lr=1.0, line_search_fn="strong_wolfe")
-        self.optimizer = optim.Adam(self.parameters())
+        self.optimizer = optim.Adam(self.parameters(), lr=1.0)
         self.batch_idx = 0
 
     def train_batch(self):
