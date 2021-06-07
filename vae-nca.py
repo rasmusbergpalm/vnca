@@ -52,21 +52,21 @@ class Model(nn.Module):
 
         print(self)
         self.to(self.device)
-        # self.optimizer = optim.LBFGS(self.parameters(), lr=1.0, line_search_fn="strong_wolfe")
-        self.optimizer = optim.Adam(self.parameters())
+        self.optimizer = optim.LBFGS(self.parameters(), lr=1.0, line_search_fn="strong_wolfe")
+        # self.optimizer = optim.Adam(self.parameters())
         self.batch_idx = 0
 
     def train_batch(self):
         self.train(True)
 
-        # def closure():
-        self.optimizer.zero_grad()
-        x, y = next(self.train_loader)
-        loss, z, p_x_given_z = self.forward(x, self.train_samples, self.train_loss_fn)
-        loss.backward()
-        # return loss
+        def closure():
+            self.optimizer.zero_grad()
+            x, y = next(self.train_loader)
+            loss, z, p_x_given_z = self.forward(x, self.train_samples, self.train_loss_fn)
+            loss.backward()
+            return loss
 
-        self.optimizer.step()
+        loss = self.optimizer.step(closure)
 
         # if self.batch_idx % 100 == 0:
         self.report(self.train_writer, loss)
