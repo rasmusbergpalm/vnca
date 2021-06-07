@@ -52,23 +52,24 @@ class Model(nn.Module):
 
         print(self)
         self.to(self.device)
-        self.optimizer = optim.LBFGS(self.parameters(), lr=1.0, line_search_fn="strong_wolfe")
+        # self.optimizer = optim.LBFGS(self.parameters(), lr=1.0, line_search_fn="strong_wolfe")
+        self.optimizer = optim.Adam(self.parameters())
         self.batch_idx = 0
 
     def train_batch(self):
         self.train(True)
 
-        def closure():
-            self.optimizer.zero_grad()
-            x, y = next(self.train_loader)
-            loss, z, p_x_given_z = self.forward(x, self.train_samples, self.train_loss_fn)
-            loss.backward()
-            return loss
+        # def closure():
+        self.optimizer.zero_grad()
+        x, y = next(self.train_loader)
+        loss, z, p_x_given_z = self.forward(x, self.train_samples, self.train_loss_fn)
+        loss.backward()
+        # return loss
 
-        loss = self.optimizer.step(closure)
+        # loss = self.optimizer.step(closure)
 
-        if self.batch_idx % 100 == 0:
-            self.report(self.train_writer, loss)
+        # if self.batch_idx % 100 == 0:
+        self.report(self.train_writer, loss)
 
         self.batch_idx += 1
 
@@ -182,5 +183,5 @@ if __name__ == "__main__":
     model.test_batch()
     for _ in tqdm.tqdm(range(n_train_updates)):
         model.train_batch()
-        if model.batch_idx % n_test_batches == 0:
-            model.test_batch()
+        # if model.batch_idx % n_test_batches == 0:
+        model.test_batch()
