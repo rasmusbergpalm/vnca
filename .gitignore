@@ -2,3 +2,4 @@ venv
 .idea
 *.iml
 __pycache__/
+MNIST
