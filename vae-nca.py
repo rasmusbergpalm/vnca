@@ -19,11 +19,11 @@ class Model(nn.Module):
     def __init__(self):
         super(Model, self).__init__()
         self.z_size = 16
-        self.train_samples = 16
-        self.train_loss_fn = self.iwae_loss_fn
+        self.train_samples = 1
+        self.train_loss_fn = self.elbo_loss_function
         self.test_loss_fn = self.iwae_loss_fn
 
-        batch_size = 256
+        batch_size = 1000
         self.hidden_size = 512
         self.test_samples = 1024
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -51,16 +51,24 @@ class Model(nn.Module):
 
         print(self)
         self.to(self.device)
-        self.optimizer = optim.Adam(self.parameters(), lr=3e-4)
+        self.optimizer = optim.LBFGS(self.parameters(), lr=1.0, line_search_fn="strong_wolfe")
         self.batch_idx = 0
 
     def train_batch(self):
-        x, y = next(self.train_loader)
         self.train(True)
-        self.optimizer.zero_grad()
-        loss, z, p_x_given_z = self.forward(x, self.train_samples, self.train_loss_fn)
-        loss.backward()
-        self.optimizer.step()
+
+        def closure():
+            self.optimizer.zero_grad()
+            loss = 0
+            for _ in range(60):
+                x, y = next(self.train_loader)
+                batch_loss, z, p_x_given_z = self.forward(x, self.train_samples, self.train_loss_fn)
+                loss = loss + batch_loss
+            loss = loss / 60
+            loss.backward()
+            return loss
+
+        loss = self.optimizer.step(closure)
 
         if self.batch_idx % 100 == 0:
             self.report(self.train_writer, loss)
@@ -68,10 +76,14 @@ class Model(nn.Module):
         self.batch_idx += 1
 
     def test_batch(self):
-        x, y = next(self.test_loader)
         self.train(False)
         with t.no_grad():
-            loss, z, p_x_given_z = self.forward(x, self.test_samples, self.test_loss_fn)
+            loss = 0
+            for _ in range(10):
+                x, y = next(self.test_loader)
+                batch_loss, z, p_x_given_z = self.forward(x, self.test_samples, self.test_loss_fn)
+                loss = loss + batch_loss
+            loss = loss / 10
             self.report(self.test_writer, loss)
 
     def _plot_samples(self):
