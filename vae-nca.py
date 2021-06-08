@@ -133,7 +133,7 @@ class Model(nn.Module):
         bs, ns, zs = z.shape
         z[:, :, 0] = 1.0
         z = z.reshape((-1, self.z_size)).unsqueeze(2).unsqueeze(3).expand(-1, -1, 2, 2).sg("bz22")
-        state = t.zeros(z.shape[0], self.z_size, self.h, self.w, device=self.device).sg("bzhw")
+        state = t.zeros(z.shape[0], self.z_size, self.h, self.w, device=self.device, requires_grad=True).sg("bzhw")
         state[:, :, self.h // 2 - 1:self.h // 2 + 1, self.w // 2 - 1:self.w // 2 + 1] = z  # the middle 2x2
         states = self.nca(state)
         state = states[-1].sg("bzhw").reshape((bs, ns, self.z_size, -1)).sg("Bnzx")
