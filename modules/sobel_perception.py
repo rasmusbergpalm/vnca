@@ -4,12 +4,13 @@ import shapeguard
 
 class SobelPerception(t.nn.Module):
 
-    def __init__(self, channels_in):
+    def __init__(self, channels_in, device):
         super().__init__()
         self.channels_in = channels_in
+        t.nn.Parameter()
         self.sobel_x = t.tensor([[-1.0, 0.0, +1.0],
                                  [-2.0, 0.0, +2.0],
-                                 [-1.0, 0.0, +1.0]]).unsqueeze(0).unsqueeze(0).expand((channels_in, 1, 3, 3)) / 8.0  # (out, in, h, w)
+                                 [-1.0, 0.0, +1.0]], device=device).unsqueeze(0).unsqueeze(0).expand((channels_in, 1, 3, 3)) / 8.0  # (out, in, h, w)
         self.sobel_y = self.sobel_x.permute(0, 1, 3, 2)
 
     def forward(self, state):

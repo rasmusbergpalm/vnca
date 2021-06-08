@@ -60,7 +60,7 @@ class Model(nn.Module):
         )
         update_net = DNAUpdate(self.z_size)
 
-        self.nca = MitosisNCA(self.h, self.w, self.z_size, SobelPerception(self.z_size), update_net, 4, 8, 0)
+        self.nca = MitosisNCA(self.h, self.w, self.z_size, SobelPerception(self.z_size, self.device), update_net, 4, 8, 0)
 
         self.p_z = Normal(t.zeros(self.z_size, device=self.device), t.ones(self.z_size, device=self.device))
 
