@@ -126,7 +126,7 @@ class Model(nn.Module):
         z.sg("Bnz")
         bs, ns, zs = z.shape
         z = z.reshape((-1, self.z_size)).unsqueeze(2).unsqueeze(3).expand(-1, -1, 2, 2).sg("bz22")
-        state = t.zeros(z.shape[0], self.z_size, self.h, self.w).sg("bzhw")
+        state = t.zeros(z.shape[0], self.z_size, self.h, self.w, device=self.device).sg("bzhw")
         state[:, :, self.h // 2 - 1:self.h // 2 + 1, self.w // 2 - 1:self.w // 2 + 1] = z  # the middle 2x2
         states = self.nca(state)
         state = states[-1].sg("bzhw").reshape((bs, ns, self.z_size, -1)).sg("Bnzx")
