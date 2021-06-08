@@ -125,8 +125,8 @@ class Model(nn.Module):
     def decode(self, z: t.Tensor) -> Distribution:  # p(x|z)
         z.sg("Bnz")
         bs, ns, zs = z.shape
+        z[:, :, 0] = 1.0
         z = z.reshape((-1, self.z_size)).unsqueeze(2).unsqueeze(3).expand(-1, -1, 2, 2).sg("bz22")
-        z[:, 0, :, :] = 1.0
         state = t.zeros(z.shape[0], self.z_size, self.h, self.w, device=self.device).sg("bzhw")
         state[:, :, self.h // 2 - 1:self.h // 2 + 1, self.w // 2 - 1:self.w // 2 + 1] = z  # the middle 2x2
         states = self.nca(state)
