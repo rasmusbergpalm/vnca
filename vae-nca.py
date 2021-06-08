@@ -71,6 +71,9 @@ class Model(nn.Module):
         self.train_writer, self.test_writer = get_writers("hierarchical-nca")
 
         print(self)
+        for n, p in self.named_parameters():
+            print(n, p.shape)
+
         self.to(self.device)
         self.optimizer = optim.Adam(self.parameters())
         self.batch_idx = 0
@@ -82,6 +85,9 @@ class Model(nn.Module):
         x, y = next(self.train_loader)
         loss, z, p_x_given_z = self.forward(x, self.train_samples, self.train_loss_fn)
         loss.backward()
+
+        for p in self.parameters():  # grad norm
+            p.grad /= (t.norm(p.grad) + 1e-8)
 
         self.optimizer.step()
 
