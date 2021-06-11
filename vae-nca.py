@@ -58,9 +58,14 @@ class Model(nn.Module):
             nn.Linear(self.hidden_size, self.hidden_size), nn.ELU(),
             nn.Linear(self.hidden_size, 2 * self.z_size)
         )
-        update_net = DNAUpdate(self.z_size)
-
-        self.nca = MitosisNCA(self.h, self.w, self.z_size, SobelPerception(self.z_size, self.device), update_net, 4, 8, 0)
+        # update_net = DNAUpdate(self.z_size)
+        # self.nca = MitosisNCA(self.h, self.w, self.z_size, SobelPerception(self.z_size, self.device), update_net, 4, 8, 0)
+        self.decoder = nn.Sequential(
+            nn.Linear(self.z_size, self.hidden_size), nn.ELU(),
+            nn.Linear(self.hidden_size, self.hidden_size), nn.ELU(),
+            nn.Linear(self.hidden_size, self.hidden_size), nn.ELU(),
+            nn.Linear(self.hidden_size, 32 ** 2)
+        )
 
         self.p_z = Normal(t.zeros(self.z_size, device=self.device), t.ones(self.z_size, device=self.device))
 
@@ -75,7 +80,7 @@ class Model(nn.Module):
             print(n, p.shape)
 
         self.to(self.device)
-        self.optimizer = optim.Adam(self.parameters(), lr=1e-5)
+        self.optimizer = optim.Adam(self.parameters(), lr=1e-3)
         self.batch_idx = 0
 
     def train_batch(self):
@@ -128,7 +133,11 @@ class Model(nn.Module):
         logsigma = q[:, self.z_size:].sg("Bz")
         return Normal(loc=loc, scale=t.exp(logsigma))
 
-    def decode(self, z: t.Tensor) -> Distribution:  # p(x|z)
+    def decode(self, z: t.Tensor) -> Distribution:
+        z.sg("Bnz")
+        return Binomial(1, logits=self.decoder(z)).sg("Bnx")
+
+    def decode_nca(self, z: t.Tensor) -> Distribution:  # p(x|z)
         z.sg("Bnz")
         bs, ns, zs = z.shape
         z[:, :, 0] = 1.0
@@ -138,7 +147,8 @@ class Model(nn.Module):
         # state[:, :, self.h // 2 - 1:self.h // 2 + 1, self.w // 2 - 1:self.w // 2 + 1] = z  # the middle 2x2
         states = self.nca(state)
         state = states[-1].sg("bzhw").reshape((bs, ns, self.z_size, -1)).sg("Bnzx")
-        return Binomial(1, logits=state[:, :, 0, :]).sg("Bnx")
+        logits = state[:, :, 0, :]
+        return Binomial(1, logits=logits).sg("Bnx")
 
     def forward(self, x, n_samples, loss_fn):
         ShapeGuard.reset()
