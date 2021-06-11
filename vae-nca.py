@@ -75,7 +75,7 @@ class Model(nn.Module):
             print(n, p.shape)
 
         self.to(self.device)
-        self.optimizer = optim.Adam(self.parameters())
+        self.optimizer = optim.Adam(self.parameters(), lr=1e-4)
         self.batch_idx = 0
 
     def train_batch(self):
@@ -91,7 +91,7 @@ class Model(nn.Module):
 
         self.optimizer.step()
 
-        if self.batch_idx % 100 == 0:
+        if self.batch_idx % 1 == 0:
             self.report(self.train_writer, loss)
 
         self.batch_idx += 1
