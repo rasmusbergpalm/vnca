@@ -59,7 +59,7 @@ class Model(nn.Module):
             nn.Linear(self.hidden_size, 2 * self.z_size)
         )
         update_net = DNAUpdate(self.z_size)
-        self.nca = MitosisNCA(self.h, self.w, self.z_size, SobelPerception(self.z_size, self.device), update_net, 4, 8, 0)
+        self.nca = MitosisNCA(self.h, self.w, self.z_size, SobelPerception(self.z_size, self.device), update_net, 4, 8, 1)
         """
         self.decoder = nn.Sequential(
             nn.Linear(self.z_size, self.hidden_size), nn.ELU(),
@@ -146,7 +146,7 @@ class Model(nn.Module):
     def decode(self, z: t.Tensor) -> Distribution:  # p(x|z)
         z.sg("Bnz")
         bs, ns, zs = z.shape
-        z[:, :, 0] = 1.0
+        z[:, :, 1] = 1.0
         z = z.reshape((-1, self.z_size)).unsqueeze(2).unsqueeze(3).expand(-1, -1, 2, 2).sg("bz22")
         state = t.nn.functional.pad(z, [15, 15, 15, 15], mode="constant", value=0)
         # state = t.zeros(z.shape[0], self.z_size, self.h, self.w, device=self.device, requires_grad=True).sg("bzhw")
