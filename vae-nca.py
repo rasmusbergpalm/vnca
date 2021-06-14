@@ -58,20 +58,25 @@ class Model(nn.Module):
             nn.Linear(self.hidden_size, self.hidden_size), nn.ELU(),
             nn.Linear(self.hidden_size, 2 * self.z_size)
         )
-        # update_net = DNAUpdate(self.z_size)
-        # self.nca = MitosisNCA(self.h, self.w, self.z_size, SobelPerception(self.z_size, self.device), update_net, 4, 8, 0)
+        update_net = DNAUpdate(self.z_size)
+        self.nca = MitosisNCA(self.h, self.w, self.z_size, SobelPerception(self.z_size, self.device), update_net, 4, 8, 0)
+        """
         self.decoder = nn.Sequential(
             nn.Linear(self.z_size, self.hidden_size), nn.ELU(),
             nn.Linear(self.hidden_size, self.hidden_size), nn.ELU(),
             nn.Linear(self.hidden_size, self.hidden_size), nn.ELU(),
             nn.Linear(self.hidden_size, 32 ** 2)
         )
+        """
 
         self.p_z = Normal(t.zeros(self.z_size, device=self.device), t.ones(self.z_size, device=self.device))
 
         data_dir = os.environ.get('DATA_DIR') or "."
         tp = transforms.Compose([transforms.ToTensor(), transforms.Pad(2)])  # 32, 32
         self.train_loader = iter(DataLoader(IterableWrapper(datasets.MNIST(data_dir, train=True, download=True, transform=tp)), batch_size=batch_size, pin_memory=True))
+        x, y = next(self.train_loader)  # (bs, x)
+        self.x = x[0:1]
+        self.y = y[0:1]
         self.test_loader = iter(DataLoader(IterableWrapper(datasets.MNIST(data_dir, train=False, transform=tp)), batch_size=batch_size, pin_memory=True))
         self.train_writer, self.test_writer = get_writers("hierarchical-nca")
 
@@ -87,7 +92,8 @@ class Model(nn.Module):
         self.train(True)
 
         self.optimizer.zero_grad()
-        x, y = next(self.train_loader)
+        # x, y = next(self.train_loader)
+        x, y = self.x, self.y
         loss, z, p_x_given_z = self.forward(x, self.train_samples, self.train_loss_fn)
         loss.backward()
 
@@ -133,11 +139,11 @@ class Model(nn.Module):
         logsigma = q[:, self.z_size:].sg("Bz")
         return Normal(loc=loc, scale=t.exp(logsigma))
 
-    def decode(self, z: t.Tensor) -> Distribution:
+    def decode_vae(self, z: t.Tensor) -> Distribution:
         z.sg("Bnz")
         return Binomial(1, logits=self.decoder(z)).sg("Bnx")
 
-    def decode_nca(self, z: t.Tensor) -> Distribution:  # p(x|z)
+    def decode(self, z: t.Tensor) -> Distribution:  # p(x|z)
         z.sg("Bnz")
         bs, ns, zs = z.shape
         z[:, :, 0] = 1.0
