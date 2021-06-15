@@ -4,7 +4,7 @@ import shapeguard
 
 class MitosisNCA(t.nn.Module):
 
-    def __init__(self, h, w, state_dim, update_net: t.nn.Module, n_duplications, steps_per_duplication, alive_channel):
+    def __init__(self, h, w, state_dim, update_net: t.nn.Module, n_duplications, steps_per_duplication, alive_channel, p_update=0.5):
         super().__init__()
         self.h = h
         self.w = w
@@ -14,6 +14,7 @@ class MitosisNCA(t.nn.Module):
         self.device = "cuda" if t.cuda.is_available() else "cpu"
         self.update_net = update_net
         self.alive_channel = alive_channel
+        self.p_update = p_update
 
     def alive_mask(self, state):
         state.sg("bchw")
@@ -25,8 +26,8 @@ class MitosisNCA(t.nn.Module):
         pre_alive = self.alive_mask(state)
 
         update = self.update_net(state)
-        rand_mask = t.randint(0, 2, (state.shape[0], 1, self.h, self.w), dtype=t.float32, device=self.device)
-        state = state + rand_mask * update
+        rand_update_mask = (t.rand((state.shape[0], 1, self.h, self.w), device=self.device) < self.p_update).to(t.float32)
+        state = state + rand_update_mask * update
 
         post_alive = self.alive_mask(state)
         alive_mask = pre_alive * post_alive
