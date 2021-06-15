@@ -31,7 +31,7 @@ class MitosisNCA(t.nn.Module):
 
         post_alive = self.alive_mask(state)
         alive_mask = pre_alive * post_alive
-        return state * alive_mask
+        return state  # * alive_mask
 
     def forward(self, state):
         state.sg("bchw")
