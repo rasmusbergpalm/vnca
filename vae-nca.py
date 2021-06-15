@@ -146,7 +146,7 @@ class Model(nn.Module):
     def decode(self, z: t.Tensor) -> Distribution:  # p(x|z)
         z.sg("Bnz")
         bs, ns, zs = z.shape
-        z[:, :, 1] = 1.0
+        z[:, :, :] = 1.0
         z = z.reshape((-1, self.z_size)).unsqueeze(2).unsqueeze(3).expand(-1, -1, 2, 2).sg("bz22")
         state = t.nn.functional.pad(z, [15, 15, 15, 15], mode="constant", value=0)
         # state = t.zeros(z.shape[0], self.z_size, self.h, self.w, device=self.device, requires_grad=True).sg("bzhw")
