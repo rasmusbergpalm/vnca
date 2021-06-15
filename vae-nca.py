@@ -59,7 +59,7 @@ class Model(nn.Module):
             nn.Linear(self.hidden_size, 2 * self.z_size)
         )
         update_net = DNAUpdate(self.z_size)
-        self.nca = MitosisNCA(self.h, self.w, self.z_size, update_net, 4, 8, 1)
+        self.nca = MitosisNCA(self.h, self.w, self.z_size, update_net, 4, 8, 1, 1.0)
         """
         self.decoder = nn.Sequential(
             nn.Linear(self.z_size, self.hidden_size), nn.ELU(),
@@ -85,7 +85,7 @@ class Model(nn.Module):
             print(n, p.shape)
 
         self.to(self.device)
-        self.optimizer = optim.Adam(self.parameters(), lr=1e-4)
+        self.optimizer = optim.Adam(self.parameters(), lr=1e-3)
         self.batch_idx = 0
 
     def train_batch(self):
