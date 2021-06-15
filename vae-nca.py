@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import torch as t
 import torch.utils.data
 import tqdm as tqdm
+from shapeguard import ShapeGuard
 from torch import nn, optim
 from torch.distributions import Normal, Distribution, Binomial, kl_divergence
 from torch.utils.data import DataLoader
@@ -12,9 +13,7 @@ from torchvision import datasets, transforms
 
 from iterable_dataset_wrapper import IterableWrapper
 from modules.nca import MitosisNCA
-from modules.sobel_perception import SobelPerception
 from util import get_writers
-from shapeguard import ShapeGuard
 
 
 class DNAUpdate(nn.Module):
@@ -22,17 +21,18 @@ class DNAUpdate(nn.Module):
         super().__init__()
         self.state_dim = state_dim
         self.update_net = t.nn.Sequential(
-            t.nn.Conv2d(3 * state_dim, 128, 1), t.nn.ReLU(),
-            t.nn.Conv2d(128, state_dim, 1)
+            t.nn.Conv2d(state_dim, 128, 3, padding=1),
+            t.nn.Tanh(),
+            t.nn.Conv2d(128, 128, 1),
+            t.nn.Tanh(),
+            t.nn.Conv2d(128, state_dim, 1, bias=False)
         )
-        self.update_net[0].bias.data.fill_(0.0)
-        self.update_net[2].weight.data.fill_(0.0)
-        self.update_net[2].bias.data.fill_(0.0)
+        self.update_net[-1].weight.data.fill_(0.0)
 
     def forward(self, state):
-        state.sg("Bphw")
+        state.sg("Bzhw")
         update = self.update_net(state).sg("Bzhw")
-        update[:, self.state_dim // 2:, :, :] = 0.0  # zero out the last half (DNA)
+        update[:, (self.state_dim // 2):, :, :] = 0.0  # zero out the last half (DNA)
         return update
 
 
@@ -59,7 +59,7 @@ class Model(nn.Module):
             nn.Linear(self.hidden_size, 2 * self.z_size)
         )
         update_net = DNAUpdate(self.z_size)
-        self.nca = MitosisNCA(self.h, self.w, self.z_size, SobelPerception(self.z_size, self.device), update_net, 4, 8, 1)
+        self.nca = MitosisNCA(self.h, self.w, self.z_size, update_net, 4, 8, 1)
         """
         self.decoder = nn.Sequential(
             nn.Linear(self.z_size, self.hidden_size), nn.ELU(),

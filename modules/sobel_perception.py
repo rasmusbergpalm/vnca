@@ -2,7 +2,7 @@ import torch as t
 import shapeguard
 
 
-class SobelPerception(t.nn.Module):
+class SobelConv(t.nn.Module):
 
     def __init__(self, channels_in, device):
         super().__init__()

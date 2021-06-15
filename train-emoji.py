@@ -11,7 +11,7 @@ import util
 from modules.nca import MitosisNCA
 import torch as t
 
-from modules.sobel_perception import SobelPerception
+from modules.sobel_perception import SobelConv
 
 
 class Model(t.nn.Module):
@@ -28,14 +28,16 @@ class Model(t.nn.Module):
         super().__init__()
         self.device = "cuda" if t.cuda.is_available() else "cpu"
         update_net = t.nn.Sequential(
-            t.nn.Conv2d(3 * self.c, 128, 1), t.nn.ReLU(),
+            SobelConv(self.c, self.device),
+            t.nn.Conv2d(3 * self.c, 128, 1),
+            t.nn.ReLU(),
             t.nn.Conv2d(128, self.c, 1)
         )
-        update_net[0].bias.data.fill_(0.0)
-        update_net[2].weight.data.fill_(0.0)
-        update_net[2].bias.data.fill_(0.0)
+        update_net[1].bias.data.fill_(0.0)
+        update_net[-1].weight.data.fill_(0.0)
+        update_net[-1].bias.data.fill_(0.0)
 
-        self.nca = MitosisNCA(self.h, self.w, self.c, SobelPerception(self.c, self.device), update_net, self.n_duplications, self.steps_per_duplication, 3)
+        self.nca = MitosisNCA(self.h, self.w, self.c, update_net, self.n_duplications, self.steps_per_duplication, 3)
         self.target = self.load_emoji('🐠', 64)
         self.optim = t.optim.Adam(self.parameters(), lr=2e-3)
         self.to(self.device)
