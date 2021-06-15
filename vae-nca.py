@@ -74,9 +74,6 @@ class Model(nn.Module):
         data_dir = os.environ.get('DATA_DIR') or "."
         tp = transforms.Compose([transforms.ToTensor(), transforms.Pad(2)])  # 32, 32
         self.train_loader = iter(DataLoader(IterableWrapper(datasets.MNIST(data_dir, train=True, download=True, transform=tp)), batch_size=batch_size, pin_memory=True))
-        x, y = next(self.train_loader)  # (bs, x)
-        self.x = x[0:1]
-        self.y = y[0:1]
         self.test_loader = iter(DataLoader(IterableWrapper(datasets.MNIST(data_dir, train=False, transform=tp)), batch_size=batch_size, pin_memory=True))
         self.train_writer, self.test_writer = get_writers("hierarchical-nca")
 
@@ -92,8 +89,7 @@ class Model(nn.Module):
         self.train(True)
 
         self.optimizer.zero_grad()
-        # x, y = next(self.train_loader)
-        x, y = self.x, self.y
+        x, y = next(self.train_loader)
         loss, z, p_x_given_z = self.forward(x, self.train_samples, self.train_loss_fn)
         loss.backward()
 
@@ -146,7 +142,6 @@ class Model(nn.Module):
     def decode(self, z: t.Tensor) -> Distribution:  # p(x|z)
         z.sg("Bnz")
         bs, ns, zs = z.shape
-        z[:, :, :] = 1.0
         z = z.reshape((-1, self.z_size)).unsqueeze(2).unsqueeze(3).expand(-1, -1, 2, 2).sg("bz22")
         state = t.nn.functional.pad(z, [15, 15, 15, 15], mode="constant", value=0)
         # state = t.zeros(z.shape[0], self.z_size, self.h, self.w, device=self.device, requires_grad=True).sg("bzhw")
@@ -199,7 +194,7 @@ class Model(nn.Module):
         logpx_given_z = p_x_given_z.log_prob(x.unsqueeze(1).expand_as(p_x_given_z.mean)).sum(dim=2).mean(dim=1).sg("B")
         kld = kl_divergence(q_z_given_x, self.p_z).sum(dim=1).sg("B")
 
-        return (-logpx_given_z + 0 * kld).mean()  # (1,)
+        return (-logpx_given_z + kld).mean()  # (1,)
 
 
 def agg_post(mus, ys):
