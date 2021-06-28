@@ -98,7 +98,7 @@ class Model(nn.Module):
 
         self.optimizer.step()
 
-        if self.batch_idx % 1 == 0:
+        if self.batch_idx % 100 == 0:
             self.report(self.train_writer, loss)
 
         self.batch_idx += 1
@@ -114,19 +114,23 @@ class Model(nn.Module):
         ShapeGuard.reset()
         with torch.no_grad():
             # grid = t.stack([t.tensor([x, y]) for x in torch.linspace(-3, 3, 8) for y in torch.linspace(-3, 3, 8)]).reshape(64, 1, 2).to(self.device)
-            # grid = self.decode(grid).mean.reshape(64, 1, h, w).cpu().detach().numpy()
+            # grid = self.decode(grid).sample().reshape(64, 1, self.h, self.w).cpu().detach().numpy()
 
             samples = self.p_z.sample((64, 1)).to(self.device)
             samples = self.decode(samples).sample().reshape(64, 1, self.h, self.w).cpu().detach().numpy()
 
-        return samples
+            _, _, p_x_given_z = self.forward(next(self.test_loader)[:64], 1, self.iwae_loss_fn)
+            recons = p_x_given_z.sample().reshape(64, 1, self.h, self.w).cpu().detach().numpy()
+
+        return samples, recons
 
     def report(self, writer: SummaryWriter, loss):
         writer.add_scalar('loss', loss.item(), self.batch_idx)
 
-        samples = self._plot_samples()
+        samples, recons = self._plot_samples()
         # writer.add_images("grid", grid, self.batch_idx)
         writer.add_images("samples", samples, self.batch_idx)
+        writer.add_images("recons", recons, self.batch_idx)
 
     def encode(self, x) -> Distribution:  # q(z|x)
         x.sg("Bx")
@@ -144,8 +148,6 @@ class Model(nn.Module):
         bs, ns, zs = z.shape
         z = z.reshape((-1, self.z_size)).unsqueeze(2).unsqueeze(3).expand(-1, -1, 2, 2).sg("bz22")
         state = t.nn.functional.pad(z, [15, 15, 15, 15], mode="constant", value=0)
-        # state = t.zeros(z.shape[0], self.z_size, self.h, self.w, device=self.device, requires_grad=True).sg("bzhw")
-        # state[:, :, self.h // 2 - 1:self.h // 2 + 1, self.w // 2 - 1:self.w // 2 + 1] = z  # the middle 2x2
         states = self.nca(state)
         state = states[-1].sg("bzhw").reshape((bs, ns, self.z_size, -1)).sg("Bnzx")
         logits = state[:, :, 0, :]
