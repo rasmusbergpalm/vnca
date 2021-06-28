@@ -119,7 +119,8 @@ class Model(nn.Module):
             samples = self.p_z.sample((64, 1)).to(self.device)
             samples = self.decode(samples).sample().reshape(64, 1, self.h, self.w).cpu().detach().numpy()
 
-            _, _, p_x_given_z = self.forward(next(self.test_loader)[:64], 1, self.iwae_loss_fn)
+            x, y = next(self.test_loader)
+            _, _, p_x_given_z = self.forward(x[:64], 1, self.iwae_loss_fn)
             recons = p_x_given_z.sample().reshape(64, 1, self.h, self.w).cpu().detach().numpy()
 
         return samples, recons
