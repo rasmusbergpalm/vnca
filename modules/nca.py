@@ -4,7 +4,7 @@ import shapeguard
 
 class MitosisNCA(t.nn.Module):
 
-    def __init__(self, h, w, state_dim, update_net: t.nn.Module, n_duplications, steps_per_duplication, alive_channel, p_update=0.5):
+    def __init__(self, h, w, state_dim, update_net: t.nn.Module, n_duplications, steps_per_duplication, alive_channel, p_update=0.5, alive_threshold=0.1):
         super().__init__()
         self.h = h
         self.w = w
@@ -15,10 +15,11 @@ class MitosisNCA(t.nn.Module):
         self.update_net = update_net
         self.alive_channel = alive_channel
         self.p_update = p_update
+        self.alive_threshold = alive_threshold
 
     def alive_mask(self, state):
         state.sg("bchw")
-        alive = (t.max_pool2d(state[:, self.alive_channel:self.alive_channel + 1, :, :], 3, stride=1, padding=1) > 0.1).to(t.float32)
+        alive = (t.max_pool2d(state[:, self.alive_channel:self.alive_channel + 1, :, :], 3, stride=1, padding=1) > self.alive_threshold).to(t.float32)
         return alive
 
     def step(self, state):
