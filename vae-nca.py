@@ -151,7 +151,7 @@ class Model(nn.Module):
         state = t.nn.functional.pad(z, [15, 15, 15, 15], mode="constant", value=0)
         states = self.nca(state)
         state = states[-1].sg("bzhw").reshape((bs, ns, self.z_size, -1)).sg("Bnzx")
-        logits = state[:, :, 0, :]
+        logits = state[:, :, 0, :] - 10.0
         return Binomial(1, logits=logits).sg("Bnx")
 
     def forward(self, x, n_samples, loss_fn):
