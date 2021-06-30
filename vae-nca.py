@@ -77,8 +77,6 @@ class Model(nn.Module):
         self.test_loader = iter(DataLoader(IterableWrapper(datasets.MNIST(data_dir, train=False, transform=tp)), batch_size=batch_size, pin_memory=True))
         self.train_writer, self.test_writer = get_writers("hierarchical-nca")
 
-        self.x, self.y = next(self.train_loader)
-
         print(self)
         for n, p in self.named_parameters():
             print(n, p.shape)
@@ -91,8 +89,7 @@ class Model(nn.Module):
         self.train(True)
 
         self.optimizer.zero_grad()
-        # x, y = next(self.train_loader)
-        x, y = self.x, self.y
+        x, y = next(self.train_loader)
         loss, z, p_x_given_z = self.forward(x, self.train_samples, self.train_loss_fn)
         loss.backward()
 
@@ -150,6 +147,7 @@ class Model(nn.Module):
     def decode(self, z: t.Tensor) -> Distribution:  # p(x|z)
         z.sg("Bnz")
         bs, ns, zs = z.shape
+        z[:, :, 0] = 1.0  # Force the seed cells to be alive
         z = z.reshape((-1, self.z_size)).unsqueeze(2).unsqueeze(3).expand(-1, -1, 2, 2).sg("bz22")
         state = t.nn.functional.pad(z, [15, 15, 15, 15], mode="constant", value=0)
         states = self.nca(state)
