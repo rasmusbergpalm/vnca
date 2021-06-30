@@ -77,6 +77,8 @@ class Model(nn.Module):
         self.test_loader = iter(DataLoader(IterableWrapper(datasets.MNIST(data_dir, train=False, transform=tp)), batch_size=batch_size, pin_memory=True))
         self.train_writer, self.test_writer = get_writers("hierarchical-nca")
 
+        self.x, self.y = next(self.train_loader)
+
         print(self)
         for n, p in self.named_parameters():
             print(n, p.shape)
@@ -89,7 +91,8 @@ class Model(nn.Module):
         self.train(True)
 
         self.optimizer.zero_grad()
-        x, y = next(self.train_loader)
+        # x, y = next(self.train_loader)
+        x, y = self.x, self.y
         loss, z, p_x_given_z = self.forward(x, self.train_samples, self.train_loss_fn)
         loss.backward()
 
