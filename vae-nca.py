@@ -60,6 +60,8 @@ class Model(nn.Module):
         )
         update_net = DNAUpdate(self.z_size)
         self.nca = MitosisNCA(self.h, self.w, self.z_size, update_net, 4, 8, 0, 1.0, 0.1)
+        self.out_w = t.nn.Parameter(t.scalar_tensor(1.0), requires_grad=True)
+        self.out_b = t.nn.Parameter(t.scalar_tensor(-5.0), requires_grad=True)
         """
         self.decoder = nn.Sequential(
             nn.Linear(self.z_size, self.hidden_size), nn.ELU(),
@@ -153,7 +155,7 @@ class Model(nn.Module):
         states = self.nca(state)
         state = states[-1].sg("bzhw").reshape((bs, ns, self.z_size, -1)).sg("Bnzx")
         # probs = t.clip(state[:, :, 0, :], 0.0, 1.0)
-        logits = state[:, :, 0, :] - 5.0
+        logits = state[:, :, 0, :] * self.out_w + self.out_b
         return Binomial(1, logits=logits).sg("Bnx")
 
     def forward(self, x, n_samples, loss_fn):
