@@ -75,8 +75,8 @@ class Model(nn.Module):
 
         data_dir = os.environ.get('DATA_DIR') or "."
         tp = transforms.Compose([transforms.ToTensor(), transforms.Pad(2)])  # 32, 32
-        self.train_loader = iter(DataLoader(IterableWrapper(datasets.FashionMNIST(data_dir, train=True, download=True, transform=tp)), batch_size=batch_size, pin_memory=True))
-        self.test_loader = iter(DataLoader(IterableWrapper(datasets.FashionMNIST(data_dir, train=False, transform=tp)), batch_size=batch_size, pin_memory=True))
+        self.train_loader = iter(DataLoader(IterableWrapper(datasets.KMNIST(data_dir, train=True, download=True, transform=tp)), batch_size=batch_size, pin_memory=True))
+        self.test_loader = iter(DataLoader(IterableWrapper(datasets.KMNIST(data_dir, train=False, transform=tp)), batch_size=batch_size, pin_memory=True))
         self.train_writer, self.test_writer = get_writers("hierarchical-nca")
 
         print(self)
