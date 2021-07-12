@@ -12,7 +12,9 @@ from torch.utils.tensorboard import SummaryWriter
 from torchvision import datasets, transforms
 
 from iterable_dataset_wrapper import IterableWrapper
+from modules.model import Model
 from modules.nca import MitosisNCA
+from train import train
 from util import get_writers
 
 
@@ -36,8 +38,7 @@ class DNAUpdate(nn.Module):
         return update
 
 
-class Model(nn.Module):
-
+class VAENCA(Model, nn.Module):
     def __init__(self):
         super(Model, self).__init__()
         self.h = self.w = 32
@@ -62,15 +63,6 @@ class Model(nn.Module):
         self.nca = MitosisNCA(self.h, self.w, self.z_size, update_net, 4, 8, 0, 1.0, 0.1)
         self.out_w = t.nn.Parameter(t.scalar_tensor(1.0), requires_grad=True)
         self.out_b = t.nn.Parameter(t.scalar_tensor(-5.0), requires_grad=True)
-        """
-        self.decoder = nn.Sequential(
-            nn.Linear(self.z_size, self.hidden_size), nn.ELU(),
-            nn.Linear(self.hidden_size, self.hidden_size), nn.ELU(),
-            nn.Linear(self.hidden_size, self.hidden_size), nn.ELU(),
-            nn.Linear(self.hidden_size, 32 ** 2)
-        )
-        """
-
         self.p_z = Normal(t.zeros(self.z_size, device=self.device), t.ones(self.z_size, device=self.device))
 
         data_dir = os.environ.get('DATA_DIR') or "."
@@ -104,13 +96,28 @@ class Model(nn.Module):
             self.report(self.train_writer, loss)
 
         self.batch_idx += 1
+        return loss.item()
 
-    def test_batch(self):
+    def save(self, fn):
+        t.save({
+            'batch_idx': self.batch_idx,
+            'model_state_dict': self.state_dict(),
+            'optimizer_state_dict': self.optimizer.state_dict(),
+        }, fn)
+
+    def load(self, fn):
+        checkpoint = t.load(fn, map_location=t.device(self.device))
+        self.batch_idx = checkpoint["batch_idx"]
+        self.load_state_dict(checkpoint["model_state_dict"])
+        self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+
+    def eval_batch(self):
         self.train(False)
         with t.no_grad():
             x, y = next(self.test_loader)
             loss, z, p_x_given_z = self.forward(x, self.test_samples, self.test_loss_fn)
             self.report(self.test_writer, loss)
+        return loss.item()
 
     def _plot_samples(self):
         ShapeGuard.reset()
@@ -123,7 +130,7 @@ class Model(nn.Module):
 
             x, y = next(self.test_loader)
             _, _, p_x_given_z = self.forward(x[:64], 1, self.iwae_loss_fn)
-            recons = p_x_given_z.sample().reshape(64, 1, self.h, self.w).cpu().detach().numpy()
+            recons = p_x_given_z.sample().reshape(-1, 1, self.h, self.w).cpu().detach().numpy()
 
         return samples, recons
 
@@ -142,10 +149,6 @@ class Model(nn.Module):
         logsigma = q[:, self.z_size:].sg("Bz")
         return Normal(loc=loc, scale=t.exp(logsigma))
 
-    def decode_vae(self, z: t.Tensor) -> Distribution:
-        z.sg("Bnz")
-        return Binomial(1, logits=self.decoder(z)).sg("Bnx")
-
     def decode(self, z: t.Tensor) -> Distribution:  # p(x|z)
         z.sg("Bnz")
         bs, ns, zs = z.shape
@@ -154,7 +157,6 @@ class Model(nn.Module):
         state = t.nn.functional.pad(z, [15, 15, 15, 15], mode="constant", value=0)
         states = self.nca(state)
         state = states[-1].sg("bzhw").reshape((bs, ns, self.z_size, -1)).sg("Bnzx")
-        # probs = t.clip(state[:, :, 0, :], 0.0, 1.0)
         logits = state[:, :, 0, :] * self.out_w + self.out_b
         return Binomial(1, logits=logits).sg("Bnx")
 
@@ -204,24 +206,6 @@ class Model(nn.Module):
         return (-logpx_given_z + kld).mean()  # (1,)
 
 
-def agg_post(mus, ys):
-    mus = t.cat(mus).cpu().numpy()
-    ys = t.cat(ys).cpu().numpy()
-    cmap = plt.get_cmap("tab10")
-    colors = [cmap(y) for y in ys]
-    plt.figure(figsize=(8, 8))
-    plt.scatter(mus[:, 0], mus[:, 1], alpha=0.25, c=colors, marker='.')
-    plt.close()
-
-
 if __name__ == "__main__":
-    # Distribution.set_default_validate_args(True)
-    n_train_updates = 100_000
-    n_test_batches = 100
-
-    model = Model()
-    model.test_batch()
-    for _ in tqdm.tqdm(range(n_train_updates)):
-        model.train_batch()
-        if model.batch_idx % n_test_batches == 0:
-            model.test_batch()
+    model = VAENCA()
+    train(model, n_updates=100_000, eval_interval=100)
