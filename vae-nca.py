@@ -1,12 +1,10 @@
 import os
 
-import matplotlib.pyplot as plt
 import torch as t
 import torch.utils.data
-import tqdm as tqdm
 from shapeguard import ShapeGuard
 from torch import nn, optim
-from torch.distributions import Normal, Distribution, Binomial, kl_divergence
+from torch.distributions import Normal, Distribution, kl_divergence
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 from torchvision import datasets, transforms
@@ -47,28 +45,31 @@ class VAENCA(Model, nn.Module):
         self.train_samples = 1
         self.test_loss_fn = self.iwae_loss_fn
         self.test_samples = 1
-        self.hidden_size = 512
+        self.hidden_size = 128
 
         batch_size = 128
 
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
 
         self.encoder = nn.Sequential(
-            nn.Linear(32 ** 2, self.hidden_size), nn.ELU(),
+            nn.Linear(32 ** 2 * 3, self.hidden_size), nn.ELU(),
             nn.Linear(self.hidden_size, self.hidden_size), nn.ELU(),
             nn.Linear(self.hidden_size, self.hidden_size), nn.ELU(),
             nn.Linear(self.hidden_size, 2 * self.z_size)
         )
         update_net = DNAUpdate(self.z_size)
         self.nca = MitosisNCA(self.h, self.w, self.z_size, update_net, 4, 8, 0, 1.0, 0.1)
-        self.out_w = t.nn.Parameter(t.scalar_tensor(1.0), requires_grad=True)
-        self.out_b = t.nn.Parameter(t.scalar_tensor(-5.0), requires_grad=True)
+        self.out_net = t.nn.Sequential(
+            nn.Conv2d(self.z_size, self.hidden_size, kernel_size=1), nn.ELU(),
+            nn.Conv2d(self.hidden_size, 3, kernel_size=1)
+        )
+        self.sigma = nn.Parameter(t.scalar_tensor(0.0), requires_grad=True)
         self.p_z = Normal(t.zeros(self.z_size, device=self.device), t.ones(self.z_size, device=self.device))
 
         data_dir = os.environ.get('DATA_DIR') or "."
-        tp = transforms.Compose([transforms.ToTensor(), transforms.Pad(2)])  # 32, 32
-        self.train_loader = iter(DataLoader(IterableWrapper(datasets.KMNIST(data_dir, train=True, download=True, transform=tp)), batch_size=batch_size, pin_memory=True))
-        self.test_loader = iter(DataLoader(IterableWrapper(datasets.KMNIST(data_dir, train=False, transform=tp)), batch_size=batch_size, pin_memory=True))
+        tp = transforms.Compose([transforms.ToTensor()])  # 32, 32
+        self.train_loader = iter(DataLoader(IterableWrapper(datasets.CIFAR10(data_dir, train=True, download=True, transform=tp)), batch_size=batch_size, pin_memory=True))
+        self.test_loader = iter(DataLoader(IterableWrapper(datasets.CIFAR10(data_dir, train=False, transform=tp)), batch_size=batch_size, pin_memory=True))
         self.train_writer, self.test_writer = get_writers("hierarchical-nca")
 
         print(self)
@@ -126,11 +127,11 @@ class VAENCA(Model, nn.Module):
             # grid = self.decode(grid).sample().reshape(64, 1, self.h, self.w).cpu().detach().numpy()
 
             samples = self.p_z.sample((64, 1)).to(self.device)
-            samples = self.decode(samples).sample().reshape(64, 1, self.h, self.w).cpu().detach().numpy()
+            samples = self.decode(samples).mean.reshape(64, 3, self.h, self.w).cpu().detach().numpy()
 
             x, y = next(self.test_loader)
             _, _, p_x_given_z = self.forward(x[:64], 1, self.iwae_loss_fn)
-            recons = p_x_given_z.sample().reshape(-1, 1, self.h, self.w).cpu().detach().numpy()
+            recons = p_x_given_z.mean.reshape(-1, 3, self.h, self.w).cpu().detach().numpy()
 
         return samples, recons
 
@@ -156,15 +157,15 @@ class VAENCA(Model, nn.Module):
         z = z.reshape((-1, self.z_size)).unsqueeze(2).unsqueeze(3).expand(-1, -1, 2, 2).sg("bz22")
         state = t.nn.functional.pad(z, [15, 15, 15, 15], mode="constant", value=0)
         states = self.nca(state)
-        state = states[-1].sg("bzhw").reshape((bs, ns, self.z_size, -1)).sg("Bnzx")
-        logits = state[:, :, 0, :] * self.out_w + self.out_b
-        return Binomial(1, logits=logits).sg("Bnx")
+        state = states[-1].sg("bzhw")
+        outputs = self.out_net(state).sg("b3hw").reshape((bs, ns, -1)).sg("Bnx")
+
+        return Normal(loc=outputs, scale=self.sigma.exp())
 
     def forward(self, x, n_samples, loss_fn):
         ShapeGuard.reset()
-        x.sg(("B", 1, "h", "w"))
+        x.sg("B3hw")
         x = x.to(self.device).reshape(x.shape[0], -1).sg("Bx")
-        x = Binomial(probs=x).sample()
         q_z_given_x = self.encode(x).sg("Bz")
         z = q_z_given_x.rsample((n_samples,)).permute((1, 0, 2)).sg("Bnz")
         p_x_given_z = self.decode(z).sg("Bnx")
