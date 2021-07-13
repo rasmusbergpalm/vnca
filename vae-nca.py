@@ -138,6 +138,7 @@ class VAENCA(Model, nn.Module):
 
     def report(self, writer: SummaryWriter, loss):
         writer.add_scalar('loss', loss.item(), self.batch_idx)
+        writer.add_scalar('log_sigma', self.log_sigma.item(), self.batch_idx)
 
         samples, recons = self._plot_samples()
         # writer.add_images("grid", grid, self.batch_idx)
@@ -173,7 +174,7 @@ class VAENCA(Model, nn.Module):
 
         if self.training:
             p = 0.99
-            batch_log_sigma = ((x - p_x_given_z.mean) ** 2).mean().sqrt().log().item()
+            batch_log_sigma = ((x.unsqueeze(1).expand_as(p_x_given_z.mean) - p_x_given_z.mean) ** 2).mean().sqrt().log().item()
             self.log_sigma = p * self.log_sigma + (1 - p) * batch_log_sigma
 
         loss = loss_fn(x, p_x_given_z, q_z_given_x, z)
