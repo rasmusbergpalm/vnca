@@ -173,7 +173,7 @@ class VAENCA(Model, nn.Module):
         if self.training:
             p = 0.99
             batch_log_sigma = ((x - p_x_given_z.mean) ** 2).mean().sqrt().log().item()
-            self.log_sigma = p * self.log_sigma + (1 - p) * batch_log_sigma
+            self.log_sigma.weight = p * self.log_sigma.weight + (1 - p) * batch_log_sigma
 
         loss = loss_fn(x, p_x_given_z, q_z_given_x, z)
         return loss, z, p_x_given_z
