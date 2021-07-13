@@ -63,7 +63,8 @@ class VAENCA(Model, nn.Module):
             nn.Conv2d(self.z_size, self.hidden_size, kernel_size=1), nn.ELU(),
             nn.Conv2d(self.hidden_size, 3, kernel_size=1), nn.Sigmoid()
         )
-        self.log_sigma = nn.Parameter(t.scalar_tensor(0.0), requires_grad=False)
+
+        self.register_buffer("log_sigma", t.scalar_tensor(0.0, device=self.device))
         self.p_z = Normal(t.zeros(self.z_size, device=self.device), t.ones(self.z_size, device=self.device))
 
         data_dir = os.environ.get('DATA_DIR') or "."
@@ -173,7 +174,7 @@ class VAENCA(Model, nn.Module):
         if self.training:
             p = 0.99
             batch_log_sigma = ((x - p_x_given_z.mean) ** 2).mean().sqrt().log().item()
-            self.log_sigma.data = p * self.log_sigma.data + (1 - p) * batch_log_sigma
+            self.log_sigma = p * self.log_sigma + (1 - p) * batch_log_sigma
 
         loss = loss_fn(x, p_x_given_z, q_z_given_x, z)
         return loss, z, p_x_given_z
