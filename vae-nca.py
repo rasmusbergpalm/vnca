@@ -61,9 +61,9 @@ class VAENCA(Model, nn.Module):
         self.nca = MitosisNCA(self.h, self.w, self.z_size, update_net, 4, 8, 0, 1.0, 0.1)
         self.out_net = t.nn.Sequential(
             nn.Conv2d(self.z_size, self.hidden_size, kernel_size=1), nn.ELU(),
-            nn.Conv2d(self.hidden_size, 3, kernel_size=1)
+            nn.Conv2d(self.hidden_size, 3, kernel_size=1), nn.Sigmoid()
         )
-        self.sigma = nn.Parameter(t.scalar_tensor(0.0), requires_grad=True)
+        self.log_sigma = nn.Parameter(t.scalar_tensor(0.0), requires_grad=False)
         self.p_z = Normal(t.zeros(self.z_size, device=self.device), t.ones(self.z_size, device=self.device))
 
         data_dir = os.environ.get('DATA_DIR') or "."
@@ -160,7 +160,7 @@ class VAENCA(Model, nn.Module):
         state = states[-1].sg("bzhw")
         outputs = self.out_net(state).sg("b3hw").reshape((bs, ns, -1)).sg("Bnx")
 
-        return Normal(loc=outputs, scale=self.sigma.exp())
+        return Normal(loc=outputs, scale=self.log_sigma.exp())
 
     def forward(self, x, n_samples, loss_fn):
         ShapeGuard.reset()
@@ -169,6 +169,12 @@ class VAENCA(Model, nn.Module):
         q_z_given_x = self.encode(x).sg("Bz")
         z = q_z_given_x.rsample((n_samples,)).permute((1, 0, 2)).sg("Bnz")
         p_x_given_z = self.decode(z).sg("Bnx")
+
+        if self.training:
+            p = 0.99
+            batch_log_sigma = ((x - p_x_given_z.mean) ** 2).mean().sqrt().log().item()
+            self.log_sigma = p * self.log_sigma + (1 - p) * batch_log_sigma
+
         loss = loss_fn(x, p_x_given_z, q_z_given_x, z)
         return loss, z, p_x_given_z
 
@@ -209,4 +215,5 @@ class VAENCA(Model, nn.Module):
 
 if __name__ == "__main__":
     model = VAENCA()
+    model.eval_batch()
     train(model, n_updates=100_000, eval_interval=100)
