@@ -59,10 +59,6 @@ class VAENCA(Model, nn.Module):
         )
         update_net = DNAUpdate(self.z_size)
         self.nca = MitosisNCA(self.h, self.w, self.z_size, update_net, 4, 8, 0, 1.0, 0.1)
-        self.out_net = t.nn.Sequential(
-            nn.Conv2d(self.z_size, self.hidden_size, kernel_size=1), nn.ELU(),
-            nn.Conv2d(self.hidden_size, 3, kernel_size=1), nn.Sigmoid()
-        )
 
         self.register_buffer("log_sigma", t.scalar_tensor(0.0, device=self.device))
         self.p_z = Normal(t.zeros(self.z_size, device=self.device), t.ones(self.z_size, device=self.device))
@@ -160,7 +156,8 @@ class VAENCA(Model, nn.Module):
         state = t.nn.functional.pad(z, [15, 15, 15, 15], mode="constant", value=0)
         states = self.nca(state)
         state = states[-1].sg("bzhw")
-        outputs = self.out_net(state).sg("b3hw").reshape((bs, ns, -1)).sg("Bnx")
+
+        outputs = t.sigmoid(state[:, 1:4, :, :]).sg("b3hw").reshape((bs, ns, -1)).sg("Bnx")
 
         return Normal(loc=outputs, scale=self.log_sigma.exp())
 
