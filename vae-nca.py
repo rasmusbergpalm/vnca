@@ -39,7 +39,7 @@ class DNAUpdate(nn.Module):
 class VAENCA(Model, nn.Module):
     def __init__(self):
         super(Model, self).__init__()
-        self.h = self.w = 32
+        self.h = self.w = 64
         self.z_size = 32
         self.train_loss_fn = self.elbo_loss_function
         self.train_samples = 1
@@ -52,21 +52,21 @@ class VAENCA(Model, nn.Module):
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
 
         self.encoder = nn.Sequential(
-            nn.Linear(32 ** 2 * 3, self.hidden_size), nn.ELU(),
+            nn.Linear(self.h * self.w * 3, self.hidden_size), nn.ELU(),
             nn.Linear(self.hidden_size, self.hidden_size), nn.ELU(),
             nn.Linear(self.hidden_size, self.hidden_size), nn.ELU(),
             nn.Linear(self.hidden_size, 2 * self.z_size)
         )
         update_net = DNAUpdate(self.z_size)
-        self.nca = MitosisNCA(self.h, self.w, self.z_size, update_net, 4, 8, 0, 1.0, 0.1)
+        self.nca = MitosisNCA(self.h, self.w, self.z_size, update_net, 5, 8, 0, 1.0, 0.1)
 
         self.register_buffer("log_sigma", t.scalar_tensor(0.0, device=self.device))
         self.p_z = Normal(t.zeros(self.z_size, device=self.device), t.ones(self.z_size, device=self.device))
 
         data_dir = os.environ.get('DATA_DIR') or "."
-        tp = transforms.Compose([transforms.ToTensor()])  # 32, 32
-        self.train_loader = iter(DataLoader(IterableWrapper(datasets.CIFAR10(data_dir, train=True, download=True, transform=tp)), batch_size=batch_size, pin_memory=True))
-        self.test_loader = iter(DataLoader(IterableWrapper(datasets.CIFAR10(data_dir, train=False, transform=tp)), batch_size=batch_size, pin_memory=True))
+        tp = transforms.Compose([transforms.Resize((self.h, self.w)), transforms.ToTensor()])
+        self.train_loader = iter(DataLoader(IterableWrapper(datasets.CelebA(data_dir, split="train", download=True, transform=tp)), batch_size=batch_size, pin_memory=True))
+        self.test_loader = iter(DataLoader(IterableWrapper(datasets.CelebA(data_dir, split="valid", transform=tp)), batch_size=batch_size, pin_memory=True))
         self.train_writer, self.test_writer = get_writers("hierarchical-nca")
 
         print(self)
@@ -153,7 +153,8 @@ class VAENCA(Model, nn.Module):
         bs, ns, zs = z.shape
         z[:, :, 0] = 1.0  # Force the seed cells to be alive
         z = z.reshape((-1, self.z_size)).unsqueeze(2).unsqueeze(3).expand(-1, -1, 2, 2).sg("bz22")
-        state = t.nn.functional.pad(z, [15, 15, 15, 15], mode="constant", value=0)
+        pad = [self.h // 2 - 1, self.h // 2 - 1, self.w // 2 - 1, self.w // 2 - 1]
+        state = t.nn.functional.pad(z, pad, mode="constant", value=0)
         states = self.nca(state)
         state = states[-1].sg("bzhw")
 
