@@ -25,8 +25,6 @@ class DNAUpdate(nn.Module):
             t.nn.Tanh(),
             t.nn.Conv2d(hidden_dim, hidden_dim, 1),
             t.nn.Tanh(),
-            t.nn.Conv2d(hidden_dim, hidden_dim, 1),
-            t.nn.Tanh(),
             t.nn.Conv2d(hidden_dim, state_dim, 1, bias=False)
         )
         self.update_net[-1].weight.data.fill_(0.0)
@@ -42,31 +40,33 @@ class VAENCA(Model, nn.Module):
     def __init__(self):
         super(Model, self).__init__()
         self.h = self.w = 64
-        self.z_size = 64
+        self.z_size = 32
         self.train_loss_fn = self.elbo_loss_function
         self.train_samples = 1
         self.test_loss_fn = self.iwae_loss_fn
         self.test_samples = 1
         self.hidden_size = 128
 
-        batch_size = 16
+        batch_size = 32
 
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
 
         self.encoder = nn.Sequential(
-            nn.Linear(self.h * self.w * 3, self.hidden_size), nn.ELU(),
+            nn.Linear(self.h * self.w * 4, self.hidden_size), nn.ELU(),
             nn.Linear(self.hidden_size, self.hidden_size), nn.ELU(),
             nn.Linear(self.hidden_size, self.hidden_size), nn.ELU(),
             nn.Linear(self.hidden_size, 2 * self.z_size)
         )
         update_net = DNAUpdate(self.z_size, self.hidden_size)
-        self.nca = MitosisNCA(self.h, self.w, self.z_size, update_net, 5, 8, 0, 1.0, 0.1)
+        self.alive_channel = 3  # Alpha in RGBA
+        self.nca = MitosisNCA(self.h, self.w, self.z_size, update_net, 5, 8, self.alive_channel, 1.0, 0.1)
 
         self.register_buffer("log_sigma", t.scalar_tensor(0.0, device=self.device))
         self.p_z = Normal(t.zeros(self.z_size, device=self.device), t.ones(self.z_size, device=self.device))
 
         data_dir = os.environ.get('DATA_DIR') or "."
-        tp = transforms.Compose([transforms.Resize((self.h, self.w)), transforms.ToTensor()])
+
+        tp = transforms.Compose([transforms.Lambda(lambda img: img.convert("RGBA")), transforms.Resize((self.h, self.w)), transforms.ToTensor()])
         self.train_loader = iter(DataLoader(IterableWrapper(datasets.CelebA(data_dir, split="train", download=True, transform=tp)), batch_size=batch_size, pin_memory=True))
         self.test_loader = iter(DataLoader(IterableWrapper(datasets.CelebA(data_dir, split="valid", transform=tp)), batch_size=batch_size, pin_memory=True))
         self.train_writer, self.test_writer = get_writers("hierarchical-nca")
@@ -126,11 +126,13 @@ class VAENCA(Model, nn.Module):
             # grid = self.decode(grid).sample().reshape(64, 1, self.h, self.w).cpu().detach().numpy()
 
             samples = self.p_z.sample((64, 1)).to(self.device)
-            samples = self.decode(samples).mean.reshape(64, 3, self.h, self.w).cpu().detach().numpy()
+            samples = self.decode(samples).mean.reshape(64, 4, self.h, self.w).cpu().detach().numpy()
+            samples = samples[:, :3, :, :] * samples[:, 3:4, :, :]
 
             x, y = next(self.test_loader)
             _, _, p_x_given_z = self.forward(x[:64], 1, self.iwae_loss_fn)
-            recons = p_x_given_z.mean.reshape(-1, 3, self.h, self.w).cpu().detach().numpy()
+            recons = p_x_given_z.mean.reshape(-1, 4, self.h, self.w).cpu().detach().numpy()
+            recons = recons[:, :3, :, :] * recons[:, 3:4, :, :]
 
         return samples, recons
 
@@ -153,20 +155,20 @@ class VAENCA(Model, nn.Module):
     def decode(self, z: t.Tensor) -> Distribution:  # p(x|z)
         z.sg("Bnz")
         bs, ns, zs = z.shape
-        z[:, :, 0] = 1.0  # Force the seed cells to be alive
+        z[:, :, self.alive_channel] = 1.0  # Force the seed cells to be alive
         z = z.reshape((-1, self.z_size)).unsqueeze(2).unsqueeze(3).expand(-1, -1, 2, 2).sg("bz22")
         pad = [self.h // 2 - 1, self.h // 2 - 1, self.w // 2 - 1, self.w // 2 - 1]
         state = t.nn.functional.pad(z, pad, mode="constant", value=0)
         states = self.nca(state)
         state = states[-1].sg("bzhw")
 
-        outputs = t.sigmoid(state[:, 1:4, :, :]).sg("b3hw").reshape((bs, ns, -1)).sg("Bnx")
+        outputs = t.sigmoid(state[:, :4, :, :]).sg("b4hw").reshape((bs, ns, -1)).sg("Bnx")
 
         return Normal(loc=outputs, scale=self.log_sigma.exp())
 
     def forward(self, x, n_samples, loss_fn):
         ShapeGuard.reset()
-        x.sg("B3hw")
+        x.sg("B4hw")
         x = x.to(self.device).reshape(x.shape[0], -1).sg("Bx")
         q_z_given_x = self.encode(x).sg("Bz")
         z = q_z_given_x.rsample((n_samples,)).permute((1, 0, 2)).sg("Bnz")

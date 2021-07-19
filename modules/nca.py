@@ -24,15 +24,15 @@ class MitosisNCA(t.nn.Module):
 
     def step(self, state):
         state.sg("bchw")
-        # pre_alive = self.alive_mask(state)
+        pre_alive = self.alive_mask(state)
 
         update = self.update_net(state)
         rand_update_mask = (t.rand((state.shape[0], 1, self.h, self.w), device=self.device) < self.p_update).to(t.float32)
         state = state + rand_update_mask * update
 
-        # post_alive = self.alive_mask(state)
-        # alive_mask = pre_alive * post_alive
-        return state  # * alive_mask
+        post_alive = self.alive_mask(state)
+        alive_mask = pre_alive * post_alive
+        return state * alive_mask
 
     def forward(self, state):
         state.sg("bchw")
