@@ -17,15 +17,17 @@ from util import get_writers
 
 
 class DNAUpdate(nn.Module):
-    def __init__(self, state_dim):
+    def __init__(self, state_dim, hidden_dim):
         super().__init__()
         self.state_dim = state_dim
         self.update_net = t.nn.Sequential(
-            t.nn.Conv2d(state_dim, 128, 3, padding=1),
+            t.nn.Conv2d(state_dim, hidden_dim, 3, padding=1),
             t.nn.Tanh(),
-            t.nn.Conv2d(128, 128, 1),
+            t.nn.Conv2d(hidden_dim, hidden_dim, 1),
             t.nn.Tanh(),
-            t.nn.Conv2d(128, state_dim, 1, bias=False)
+            t.nn.Conv2d(hidden_dim, hidden_dim, 1),
+            t.nn.Tanh(),
+            t.nn.Conv2d(hidden_dim, state_dim, 1, bias=False)
         )
         self.update_net[-1].weight.data.fill_(0.0)
 
@@ -40,7 +42,7 @@ class VAENCA(Model, nn.Module):
     def __init__(self):
         super(Model, self).__init__()
         self.h = self.w = 64
-        self.z_size = 32
+        self.z_size = 64
         self.train_loss_fn = self.elbo_loss_function
         self.train_samples = 1
         self.test_loss_fn = self.iwae_loss_fn
@@ -57,7 +59,7 @@ class VAENCA(Model, nn.Module):
             nn.Linear(self.hidden_size, self.hidden_size), nn.ELU(),
             nn.Linear(self.hidden_size, 2 * self.z_size)
         )
-        update_net = DNAUpdate(self.z_size)
+        update_net = DNAUpdate(self.z_size, self.hidden_size)
         self.nca = MitosisNCA(self.h, self.w, self.z_size, update_net, 5, 8, 0, 1.0, 0.1)
 
         self.register_buffer("log_sigma", t.scalar_tensor(0.0, device=self.device))
