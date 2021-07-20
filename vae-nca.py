@@ -36,6 +36,22 @@ class DNAUpdate(nn.Module):
         return update
 
 
+class MitosisNet(nn.Module):
+    def __init__(self, state_dim, hidden_dim):
+        super().__init__()
+        self.state_dim = state_dim
+        self.net = t.nn.Sequential(
+            t.nn.Conv2d(state_dim, hidden_dim, 1),
+            t.nn.Tanh(),
+            t.nn.Conv2d(hidden_dim, state_dim // 2, 1),
+        )
+
+    def forward(self, state):
+        state.sg("Bzhw")
+        update = self.net(state)
+        return t.cat([update, state[:, (self.state_dim // 2):, :, :]], dim=1).sg("Bzhw")
+
+
 class VAENCA(Model, nn.Module):
     def __init__(self):
         super(Model, self).__init__()
@@ -59,7 +75,8 @@ class VAENCA(Model, nn.Module):
         )
         update_net = DNAUpdate(self.z_size, self.hidden_size)
         self.alive_channel = 3  # Alpha in RGBA
-        self.nca = MitosisNCA(self.h, self.w, self.z_size, update_net, 5, 8, self.alive_channel, 1.0, 0.1)
+        self.mitosis_net = MitosisNet(self.z_size, self.hidden_size)
+        self.nca = MitosisNCA(self.h, self.w, self.z_size, self.mitosis_net, update_net, 5, 8, self.alive_channel, 1.0, 0.1)
 
         self.register_buffer("log_sigma", t.scalar_tensor(0.0, device=self.device))
         self.p_z = Normal(t.zeros(self.z_size, device=self.device), t.ones(self.z_size, device=self.device))
