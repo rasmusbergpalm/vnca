@@ -46,7 +46,13 @@ class MitosisNCA(t.nn.Module):
         for i in range(self.n_duplications):
             state = t.repeat_interleave(t.repeat_interleave(state, 2, dim=2), 2, dim=3)  # cell division
             state = state[:, :, self.h // 2: self.h // 2 + self.h, self.w // 2: self.w // 2 + self.w]  # cut out middle (h, w)
+
+            pre_alive = self.alive_mask(state)
             state = self.mitosis_net(state)
+            post_alive = self.alive_mask(state)
+            alive_mask = pre_alive * post_alive
+            state = state * alive_mask
+
             states.append(state)
             for j in range(self.steps_per_duplication):
                 state = self.step(state)
