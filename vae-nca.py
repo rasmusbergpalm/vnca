@@ -65,7 +65,7 @@ class VAENCA(Model, nn.Module):
         self.test_samples = 1
         self.hidden_size = 512
 
-        batch_size = 8
+        batch_size = 4
 
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
 
