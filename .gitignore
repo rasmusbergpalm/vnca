@@ -3,3 +3,6 @@ venv
 *.iml
 __pycache__/
 MNIST
+KMNIST
+cifar-10-batches-py
+celeba
