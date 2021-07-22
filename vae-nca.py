@@ -22,9 +22,9 @@ class DNAUpdate(nn.Module):
         self.state_dim = state_dim
         self.update_net = t.nn.Sequential(
             t.nn.Conv2d(state_dim, hidden_dim, 3, padding=1),
-            t.nn.Tanh(),
+            t.nn.ELU(),
             t.nn.Conv2d(hidden_dim, hidden_dim, 1),
-            t.nn.Tanh(),
+            t.nn.ELU(),
             t.nn.Conv2d(hidden_dim, state_dim, 1, bias=False)
         )
         self.update_net[-1].weight.data.fill_(0.0)
@@ -42,7 +42,7 @@ class MitosisNet(nn.Module):
         self.state_dim = state_dim
         self.net = t.nn.Sequential(
             t.nn.Conv2d(state_dim, hidden_dim, 1),
-            t.nn.Tanh(),
+            t.nn.ELU(),
             t.nn.Conv2d(hidden_dim, state_dim // 2, 1),
         )
 
@@ -61,7 +61,7 @@ class VAENCA(Model, nn.Module):
         self.train_samples = 1
         self.test_loss_fn = self.iwae_loss_fn
         self.test_samples = 1
-        self.hidden_size = 128
+        self.hidden_size = 512
 
         batch_size = 32
 
