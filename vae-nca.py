@@ -163,8 +163,8 @@ class VAENCA(Model, nn.Module):
             for i, state in enumerate(states):
                 samples = state.reshape(64, 4, self.h, self.w).cpu().detach().numpy()
                 samples = samples[:, :3, :, :] * samples[:, 3:4, :, :]  # (64, 3, h, w)
-                samples = (samples * 255).astype(np.uint8).transpose(1, 2, 0)  # (HWC)
-                grid = make_grid(samples)
+                samples = (samples * 255).astype(np.uint8)
+                grid = make_grid(samples).transpose(1, 2, 0)  # (HWC)
                 im = Image.fromarray(grid)
                 im.save("samples-%03d.png" % i)
 
