@@ -1,12 +1,15 @@
 import os
 
+import numpy as np
 import torch as t
 import torch.utils.data
+from PIL import Image
 from shapeguard import ShapeGuard
 from torch import nn, optim
 from torch.distributions import Normal, Distribution, kl_divergence
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
+from torch.utils.tensorboard._utils import make_grid
 from torchvision import datasets, transforms
 
 from iterable_dataset_wrapper import IterableWrapper
@@ -141,9 +144,6 @@ class VAENCA(Model, nn.Module):
     def _plot_samples(self):
         ShapeGuard.reset()
         with torch.no_grad():
-            # grid = t.stack([t.tensor([x, y]) for x in torch.linspace(-3, 3, 8) for y in torch.linspace(-3, 3, 8)]).reshape(64, 1, 2).to(self.device)
-            # grid = self.decode(grid).sample().reshape(64, 1, self.h, self.w).cpu().detach().numpy()
-
             samples = self.p_z.sample((64, 1)).to(self.device)
             samples = self.decode(samples).mean.reshape(64, 4, self.h, self.w).cpu().detach().numpy()
             samples = samples[:, :3, :, :] * samples[:, 3:4, :, :]
@@ -154,6 +154,19 @@ class VAENCA(Model, nn.Module):
             recons = recons[:, :3, :, :] * recons[:, 3:4, :, :]
 
         return samples, recons
+
+    def plot_growth_samples(self):
+        ShapeGuard.reset()
+        with torch.no_grad():
+            samples = self.p_z.sample((64, 1)).to(self.device)
+            states = self.decode_all(samples)
+            for i, state in enumerate(states):
+                samples = state.reshape(64, 4, self.h, self.w).cpu().detach().numpy()
+                samples = samples[:, :3, :, :] * samples[:, 3:4, :, :]  # (64, 3, h, w)
+                samples = (samples * 255).astype(np.uint8).transpose(1, 2, 0)  # (HWC)
+                grid = make_grid(samples)
+                im = Image.fromarray(grid)
+                im.save("samples-%03d.png" % i)
 
     def report(self, writer: SummaryWriter, loss):
         writer.add_scalar('loss', loss.item(), self.batch_idx)
@@ -170,6 +183,17 @@ class VAENCA(Model, nn.Module):
         loc = q[:, :self.z_size].sg("Bz")
         logsigma = q[:, self.z_size:].sg("Bz")
         return Normal(loc=loc, scale=t.exp(logsigma))
+
+    def decode_all(self, z: t.Tensor):
+        z.sg("Bnz")
+        bs, ns, zs = z.shape
+        z[:, :, self.alive_channel] = 1.0  # Force the seed cells to be alive
+        z = z.reshape((-1, self.z_size)).unsqueeze(2).unsqueeze(3).expand(-1, -1, 2, 2).sg("bz22")
+        pad = [self.h // 2 - 1, self.h // 2 - 1, self.w // 2 - 1, self.w // 2 - 1]
+        state = t.nn.functional.pad(z, pad, mode="constant", value=0)
+        states = self.nca(state)
+
+        return [t.sigmoid(state[:, :4, :, :]).sg("b4hw").reshape((bs, ns, -1)).sg("Bnx") for state in states]
 
     def decode(self, z: t.Tensor) -> Distribution:  # p(x|z)
         z.sg("Bnz")
@@ -238,5 +262,5 @@ class VAENCA(Model, nn.Module):
 
 if __name__ == "__main__":
     model = VAENCA()
-    model.eval_batch()
-    train(model, n_updates=100_000, eval_interval=100)
+    model.load('f292772/best')
+    model.plot_growth_samples()
