@@ -145,12 +145,12 @@ class VAENCA(Model, nn.Module):
         ShapeGuard.reset()
         with torch.no_grad():
             samples = self.p_z.sample((64, 1)).to(self.device)
-            samples = self.decode(samples).mean.reshape(64, 4, self.h, self.w).cpu().detach().numpy()
+            samples = t.clip(self.decode(samples).mean, 0, 1).reshape(64, 4, self.h, self.w).cpu().detach().numpy()
             samples = samples[:, :3, :, :] * samples[:, 3:4, :, :]
 
             x, y = next(self.test_loader)
             _, _, p_x_given_z = self.forward(x[:64], 1, self.iwae_loss_fn)
-            recons = p_x_given_z.mean.reshape(-1, 4, self.h, self.w).cpu().detach().numpy()
+            recons = t.clip(p_x_given_z.mean, 0, 1).reshape(-1, 4, self.h, self.w).cpu().detach().numpy()
             recons = recons[:, :3, :, :] * recons[:, 3:4, :, :]
 
         return samples, recons
@@ -161,7 +161,7 @@ class VAENCA(Model, nn.Module):
             samples = self.p_z.sample((64, 1)).to(self.device)
             states = self.decode_all(samples)
             for i, state in enumerate(states):
-                samples = state.reshape(64, 4, self.h, self.w).cpu().detach().numpy()
+                samples = t.clip(state, 0, 1).reshape(64, 4, self.h, self.w).cpu().detach().numpy()
                 samples = samples[:, :3, :, :] * samples[:, 3:4, :, :]  # (64, 3, h, w)
                 samples = (samples * 255).astype(np.uint8)
                 grid = make_grid(samples).transpose(1, 2, 0)  # (HWC)
@@ -193,7 +193,7 @@ class VAENCA(Model, nn.Module):
         state = t.nn.functional.pad(z, pad, mode="constant", value=0)
         states = self.nca(state)
 
-        return [t.sigmoid(state[:, :4, :, :]).sg("b4hw").reshape((bs, ns, -1)).sg("Bnx") for state in states]
+        return [state[:, :4, :, :].sg("b4hw").reshape((bs, ns, -1)).sg("Bnx") for state in states]
 
     def decode(self, z: t.Tensor) -> Distribution:  # p(x|z)
         z.sg("Bnz")
@@ -205,7 +205,7 @@ class VAENCA(Model, nn.Module):
         states = self.nca(state)
         state = states[-1].sg("bzhw")
 
-        outputs = t.sigmoid(state[:, :4, :, :]).sg("b4hw").reshape((bs, ns, -1)).sg("Bnx")
+        outputs = state[:, :4, :, :].sg("b4hw").reshape((bs, ns, -1)).sg("Bnx")
 
         return Normal(loc=outputs, scale=self.log_sigma.exp())
 
@@ -262,5 +262,5 @@ class VAENCA(Model, nn.Module):
 
 if __name__ == "__main__":
     model = VAENCA()
-    model.load('../f292772/best')
-    model.plot_growth_samples()
+    model.eval_batch()
+    train(model, n_updates=100_000, eval_interval=100)
