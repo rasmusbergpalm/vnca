@@ -262,5 +262,5 @@ class VAENCA(Model, nn.Module):
 
 if __name__ == "__main__":
     model = VAENCA()
-    model.load('f292772/best')
+    model.load('../f292772/best')
     model.plot_growth_samples()
