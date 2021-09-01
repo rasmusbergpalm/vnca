@@ -262,5 +262,8 @@ class VAENCA(Model, nn.Module):
 
 if __name__ == "__main__":
     model = VAENCA()
-    model.eval_batch()
-    train(model, n_updates=100_000, eval_interval=100)
+    model.load('../05b94be/best')
+    model.plot_growth_samples()
+    print("done")
+    #model.eval_batch()
+    #train(model, n_updates=100_000, eval_interval=100)
