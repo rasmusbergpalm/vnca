@@ -81,8 +81,7 @@ class VAENCA(Model, nn.Module):
         )
         update_net = DNAUpdate(self.z_size, self.hidden_size)
         self.alive_channel = 3  # Alpha in RGBA
-        self.mitosis_net = MitosisNet(self.z_size, self.hidden_size)
-        self.nca = MitosisNCA(self.h, self.w, self.z_size, self.mitosis_net, update_net, 5, 8, self.alive_channel, 1.0, 0.1)
+        self.nca = MitosisNCA(self.h, self.w, self.z_size, None, update_net, 5, 8, self.alive_channel, 1.0, 0.1)
 
         self.register_buffer("log_sigma", t.scalar_tensor(0.0, device=self.device))
         self.p_z = Normal(t.zeros(self.z_size, device=self.device), t.ones(self.z_size, device=self.device))
@@ -152,10 +151,10 @@ class VAENCA(Model, nn.Module):
 
             growth = []
             for state in states:
-                state = t.clip(state[0:1, :4, :, :], 0, 1).cpu().detach().numpy()
+                state = t.clip(state[0:1, :4, :, :], 0, 1)
                 state = state[:, :3, :, :] * state[:, 3:4, :, :]  # (1, 3, h, w)
                 growth.append(state)
-            growth = t.cat(growth, dim=0)  # (n_states, 3, h, w)
+            growth = t.cat(growth, dim=0).cpu().detach().numpy()  # (n_states, 3, h, w)
 
             x, y = next(self.test_loader)
             _, _, p_x_given_z = self.forward(x[:64], 1, self.iwae_loss_fn)
