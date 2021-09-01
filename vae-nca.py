@@ -1,4 +1,5 @@
 import os
+from typing import Sequence, Tuple
 
 import numpy as np
 import torch as t
@@ -145,23 +146,31 @@ class VAENCA(Model, nn.Module):
         ShapeGuard.reset()
         with torch.no_grad():
             samples = self.p_z.sample((64, 1)).to(self.device)
-            samples = t.clip(self.decode(samples).mean, 0, 1).reshape(64, 4, self.h, self.w).cpu().detach().numpy()
+            decode, states = self.decode(samples)
+            samples = t.clip(decode.mean, 0, 1).reshape(64, 4, self.h, self.w).cpu().detach().numpy()
             samples = samples[:, :3, :, :] * samples[:, 3:4, :, :]
+
+            growth = []
+            for state in states:
+                state = t.clip(state[0:1, :4, :, :], 0, 1).cpu().detach().numpy()
+                state = state[:, :3, :, :] * state[:, 3:4, :, :]  # (1, 3, h, w)
+                growth.append(state)
+            growth = t.cat(growth, dim=0)  # (n_states, 3, h, w)
 
             x, y = next(self.test_loader)
             _, _, p_x_given_z = self.forward(x[:64], 1, self.iwae_loss_fn)
             recons = t.clip(p_x_given_z.mean, 0, 1).reshape(-1, 4, self.h, self.w).cpu().detach().numpy()
             recons = recons[:, :3, :, :] * recons[:, 3:4, :, :]
 
-        return samples, recons
+        return samples, recons, growth
 
     def plot_growth_samples(self):
         ShapeGuard.reset()
         with torch.no_grad():
             samples = self.p_z.sample((64, 1)).to(self.device)
-            states = self.decode_all(samples)
+            _, states = self.decode(samples)
             for i, state in enumerate(states):
-                samples = t.clip(state, 0, 1).reshape(64, 4, self.h, self.w).cpu().detach().numpy()
+                samples = t.clip(state[:, :4, :, :], 0, 1).cpu().detach().numpy()
                 samples = samples[:, :3, :, :] * samples[:, 3:4, :, :]  # (64, 3, h, w)
                 samples = (samples * 255).astype(np.uint8)
                 grid = make_grid(samples).transpose(1, 2, 0)  # (HWC)
@@ -172,10 +181,11 @@ class VAENCA(Model, nn.Module):
         writer.add_scalar('loss', loss.item(), self.batch_idx)
         writer.add_scalar('log_sigma', self.log_sigma.item(), self.batch_idx)
 
-        samples, recons = self._plot_samples()
+        samples, recons, growth = self._plot_samples()
         # writer.add_images("grid", grid, self.batch_idx)
         writer.add_images("samples", samples, self.batch_idx)
         writer.add_images("recons", recons, self.batch_idx)
+        writer.add_images("growth", growth, self.batch_idx)
 
     def encode(self, x) -> Distribution:  # q(z|x)
         x.sg("Bx")
@@ -184,7 +194,7 @@ class VAENCA(Model, nn.Module):
         logsigma = q[:, self.z_size:].sg("Bz")
         return Normal(loc=loc, scale=t.exp(logsigma))
 
-    def decode_all(self, z: t.Tensor):
+    def decode(self, z: t.Tensor) -> Tuple[Distribution, Sequence[t.Tensor]]:  # p(x|z)
         z.sg("Bnz")
         bs, ns, zs = z.shape
         z[:, :, self.alive_channel] = 1.0  # Force the seed cells to be alive
@@ -193,21 +203,9 @@ class VAENCA(Model, nn.Module):
         state = t.nn.functional.pad(z, pad, mode="constant", value=0)
         states = self.nca(state)
 
-        return [state[:, :4, :, :].sg("b4hw").reshape((bs, ns, -1)).sg("Bnx") for state in states]
+        outputs = states[-1][:, :4, :, :].sg("b4hw").reshape((bs, ns, -1)).sg("Bnx")
 
-    def decode(self, z: t.Tensor) -> Distribution:  # p(x|z)
-        z.sg("Bnz")
-        bs, ns, zs = z.shape
-        z[:, :, self.alive_channel] = 1.0  # Force the seed cells to be alive
-        z = z.reshape((-1, self.z_size)).unsqueeze(2).unsqueeze(3).expand(-1, -1, 2, 2).sg("bz22")
-        pad = [self.h // 2 - 1, self.h // 2 - 1, self.w // 2 - 1, self.w // 2 - 1]
-        state = t.nn.functional.pad(z, pad, mode="constant", value=0)
-        states = self.nca(state)
-        state = states[-1].sg("bzhw")
-
-        outputs = state[:, :4, :, :].sg("b4hw").reshape((bs, ns, -1)).sg("Bnx")
-
-        return Normal(loc=outputs, scale=self.log_sigma.exp())
+        return Normal(loc=outputs, scale=self.log_sigma.exp()), states
 
     def forward(self, x, n_samples, loss_fn):
         ShapeGuard.reset()
@@ -215,12 +213,8 @@ class VAENCA(Model, nn.Module):
         x = x.to(self.device).reshape(x.shape[0], -1).sg("Bx")
         q_z_given_x = self.encode(x).sg("Bz")
         z = q_z_given_x.rsample((n_samples,)).permute((1, 0, 2)).sg("Bnz")
-        p_x_given_z = self.decode(z).sg("Bnx")
-
-        # if self.training:
-        # p = 0.99
-        # batch_log_sigma = ((x.unsqueeze(1).expand_as(p_x_given_z.mean) - p_x_given_z.mean) ** 2).mean().sqrt().log().item()
-        # self.log_sigma = p * self.log_sigma + (1 - p) * batch_log_sigma
+        decode, _ = self.decode(z)
+        p_x_given_z = decode.sg("Bnx")
 
         loss = loss_fn(x, p_x_given_z, q_z_given_x, z)
         return loss, z, p_x_given_z
@@ -262,8 +256,5 @@ class VAENCA(Model, nn.Module):
 
 if __name__ == "__main__":
     model = VAENCA()
-    model.load('../05b94be/best')
-    model.plot_growth_samples()
-    print("done")
-    #model.eval_batch()
-    #train(model, n_updates=100_000, eval_interval=100)
+    model.eval_batch()
+    train(model, n_updates=100_000, eval_interval=100)
