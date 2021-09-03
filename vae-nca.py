@@ -221,10 +221,6 @@ class VAENCA(Model, nn.Module):
     def iwae_loss_fn(self, x: t.Tensor, p_x_given_z: Distribution, q_z_given_x: Distribution, z: t.Tensor) -> t.Tensor:
         """
           log(p(x)) >= logsumexp_{i=1}^N[ log(p(x|z_i)) + log(p(z_i)) - log(q(z_i|x))] - log(N)
-          x: (bs, 784)
-          p_x_given_z: (bs, n_samples, 784)
-          q_z_given_x: (bs, z_size)
-          z: (bs, n_samples, z_size)
         """
         x.sg("Bx")
         p_x_given_z.sg("Bnx")
@@ -241,11 +237,11 @@ class VAENCA(Model, nn.Module):
         """
           log p(x) >= E_q(z|x) [ log p(x|z) p(z) / q(z|x) ]
           Reconstruction + KL divergence losses summed over all elements and batch
-          x: (bs, h, w)
-          p_x_given_z: (bs, n_samples, hw)
-          q_z_given_x: (bs, z_size)
-          z: (bs, n_samples, z_size)
         """
+        x.sg("Bx")
+        p_x_given_z.sg("Bnx")
+        q_z_given_x.sg("Bz")
+        z.sg("Bnz")
 
         logpx_given_z = p_x_given_z.log_prob(x.unsqueeze(1).expand_as(p_x_given_z.mean)).sum(dim=2).mean(dim=1).sg("B")
         kld = kl_divergence(q_z_given_x, self.p_z).sum(dim=1).sg("B")
@@ -256,4 +252,4 @@ class VAENCA(Model, nn.Module):
 if __name__ == "__main__":
     model = VAENCA()
     model.eval_batch()
-    train(model, n_updates=100_000, eval_interval=100)
+    train(model, n_updates=1_000_000, eval_interval=100)
