@@ -11,11 +11,12 @@ from torch.distributions import Normal, Distribution, kl_divergence
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 from torch.utils.tensorboard._utils import make_grid
-from torchvision import datasets, transforms
+from torchvision import transforms
 
 from iterable_dataset_wrapper import IterableWrapper
 from modules.model import Model
 from modules.nca import MitosisNCA
+from noto import NotoEmoji
 from train import train
 from util import get_writers
 
@@ -89,8 +90,9 @@ class VAENCA(Model, nn.Module):
         data_dir = os.environ.get('DATA_DIR') or "."
 
         tp = transforms.Compose([transforms.Lambda(lambda img: img.convert("RGBA")), transforms.Resize((self.h, self.w)), transforms.ToTensor()])
-        self.train_loader = iter(DataLoader(IterableWrapper(datasets.CelebA(data_dir, split="train", download=True, transform=tp)), batch_size=batch_size, pin_memory=True))
-        self.test_loader = iter(DataLoader(IterableWrapper(datasets.CelebA(data_dir, split="valid", transform=tp)), batch_size=batch_size, pin_memory=True))
+        train_data, val_data = NotoEmoji(data_dir, tp).train_val_split()  # datasets.CelebA(data_dir, split="train", download=True, transform=tp)
+        self.train_loader = iter(DataLoader(IterableWrapper(train_data), batch_size=batch_size, pin_memory=True))
+        self.test_loader = iter(DataLoader(IterableWrapper(val_data), batch_size=batch_size, pin_memory=True))
         self.train_writer, self.test_writer = get_writers("hierarchical-nca")
 
         print(self)
@@ -252,4 +254,4 @@ class VAENCA(Model, nn.Module):
 if __name__ == "__main__":
     model = VAENCA()
     model.eval_batch()
-    train(model, n_updates=1_000_000, eval_interval=100)
+    train(model, n_updates=100_000, eval_interval=100)
