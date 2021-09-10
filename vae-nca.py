@@ -52,9 +52,10 @@ class VAENCA(Model, nn.Module):
         self.train_samples = 1
         self.test_loss_fn = self.iwae_loss_fn
         self.test_samples = 1
-        self.hidden_size = 256
+        self.hidden_size = 128
 
         batch_size = 4
+
 
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
 
