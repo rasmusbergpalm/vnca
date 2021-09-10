@@ -69,7 +69,7 @@ class VAENCA(Model, nn.Module):
         self.alive_channel = 3  # Alpha in RGBA
         self.nca = MitosisNCA(self.h, self.w, self.z_size, None, update_net, 5, 8, self.alive_channel, 1.0, 0.1)
 
-        self.log_sigma = t.nn.Parameter(t.tensor([0.0, 0.0, 0.0, 0.0], device=self.device), requires_grad=True)
+        self.log_sigma = t.nn.Parameter(t.tensor([-3.0, -3.0, -3.0, -3.0], device=self.device), requires_grad=True)
         self.p_z = Normal(t.zeros(self.z_size, device=self.device), t.ones(self.z_size, device=self.device))
 
         data_dir = os.environ.get('DATA_DIR') or "."
