@@ -44,22 +44,6 @@ class DNAUpdate(nn.Module):
         return update
 
 
-class MitosisNet(nn.Module):
-    def __init__(self, state_dim, hidden_dim):
-        super().__init__()
-        self.state_dim = state_dim
-        self.net = t.nn.Sequential(
-            t.nn.Conv2d(state_dim, hidden_dim, 1),
-            t.nn.ELU(),
-            t.nn.Conv2d(hidden_dim, state_dim // 2, 1),
-        )
-
-    def forward(self, state):
-        state.sg("Bzhw")
-        update = self.net(state)
-        return t.cat([update, state[:, (self.state_dim // 2):, :, :]], dim=1).sg("Bzhw")
-
-
 class VAENCA(Model, nn.Module):
     def __init__(self):
         super(Model, self).__init__()
@@ -85,7 +69,7 @@ class VAENCA(Model, nn.Module):
         self.alive_channel = 3  # Alpha in RGBA
         self.nca = MitosisNCA(self.h, self.w, self.z_size, None, update_net, 5, 8, self.alive_channel, 1.0, 0.1)
 
-        self.register_buffer("log_sigma", t.scalar_tensor(0.0, device=self.device))
+        self.log_sigma = t.nn.Parameter(t.tensor([0.0, 0.0, 0.0, 0.0], device=self.device), requires_grad=True)
         self.p_z = Normal(t.zeros(self.z_size, device=self.device), t.ones(self.z_size, device=self.device))
 
         data_dir = os.environ.get('DATA_DIR') or "."
@@ -207,9 +191,9 @@ class VAENCA(Model, nn.Module):
 
         state = states[-1]
         loc = state[:, :4, :, :].sg("b4hw").reshape((bs, ns, -1)).sg("Bnx")
-        logscale = state[:, 4:8, :, :].sg("b4hw").reshape((bs, ns, -1)).sg("Bnx")
+        logscale = self.log_sigma.unsqueeze(0).unsqueeze(2).unsqueeze(3).sg((1, 4, 1, 1)).expand_as(state[:, :4, :, :]).reshape((bs, ns, -1)).sg("Bnx")
 
-        return DiscreteLogistic(loc, logscale, 0, 1, 1/256), states
+        return DiscreteLogistic(loc, logscale, 0, 1, 1 / 256), states
 
     def forward(self, x, n_samples, loss_fn):
         ShapeGuard.reset()
