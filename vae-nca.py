@@ -165,7 +165,7 @@ class VAENCA(Model, nn.Module):
 
     def report(self, writer: SummaryWriter, loss):
         writer.add_scalar('loss', loss.item(), self.batch_idx)
-        writer.add_scalar('log_sigma', self.log_sigma.item(), self.batch_idx)
+        writer.add_scalar('log_sigma', self.log_sigma.mean().item(), self.batch_idx)
 
         samples, recons, growth = self._plot_samples()
         # writer.add_images("grid", grid, self.batch_idx)
