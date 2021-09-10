@@ -43,22 +43,6 @@ class DNAUpdate(nn.Module):
         return update
 
 
-class MitosisNet(nn.Module):
-    def __init__(self, state_dim, hidden_dim):
-        super().__init__()
-        self.state_dim = state_dim
-        self.net = t.nn.Sequential(
-            t.nn.Conv2d(state_dim, hidden_dim, 1),
-            t.nn.ELU(),
-            t.nn.Conv2d(hidden_dim, state_dim // 2, 1),
-        )
-
-    def forward(self, state):
-        state.sg("Bzhw")
-        update = self.net(state)
-        return t.cat([update, state[:, (self.state_dim // 2):, :, :]], dim=1).sg("Bzhw")
-
-
 class VAENCA(Model, nn.Module):
     def __init__(self):
         super(Model, self).__init__()
