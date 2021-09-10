@@ -14,6 +14,7 @@ from torch.utils.tensorboard._utils import make_grid
 from torchvision import transforms
 
 from iterable_dataset_wrapper import IterableWrapper
+from logistic import DiscreteLogistic
 from modules.model import Model
 from modules.nca import MitosisNCA
 from noto import NotoEmoji
@@ -204,9 +205,11 @@ class VAENCA(Model, nn.Module):
         state = t.nn.functional.pad(z, pad, mode="constant", value=0)
         states = self.nca(state)
 
-        outputs = states[-1][:, :4, :, :].sg("b4hw").reshape((bs, ns, -1)).sg("Bnx")
+        state = states[-1]
+        loc = state[:, :4, :, :].sg("b4hw").reshape((bs, ns, -1)).sg("Bnx")
+        logscale = state[:, 4:8, :, :].sg("b4hw").reshape((bs, ns, -1)).sg("Bnx")
 
-        return Normal(loc=outputs, scale=self.log_sigma.exp()), states
+        return DiscreteLogistic(loc, logscale, 0, 1, 1/256), states
 
     def forward(self, x, n_samples, loss_fn):
         ShapeGuard.reset()
