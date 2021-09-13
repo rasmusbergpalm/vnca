@@ -22,6 +22,9 @@ from train import train
 from util import get_writers
 
 
+# torch.autograd.set_detect_anomaly(True)
+
+
 class DNAUpdate(nn.Module):
     def __init__(self, state_dim, hidden_dim):
         super().__init__()
@@ -33,10 +36,9 @@ class DNAUpdate(nn.Module):
             t.nn.ELU(),
             t.nn.Conv2d(hidden_dim, hidden_dim, 1),
             t.nn.ELU(),
-            t.nn.Conv2d(hidden_dim, state_dim, 1, bias=False),
-            t.nn.Tanh()
+            t.nn.Conv2d(hidden_dim, state_dim, 1, bias=False)
         )
-        self.update_net[-2].weight.data.fill_(0.0)
+        self.update_net[-1].weight.data.fill_(0.0)
 
     def forward(self, state):
         state.sg("Bzhw")
@@ -94,7 +96,7 @@ class VAENCA(Model, nn.Module):
             print(n, p.shape)
 
         self.to(self.device)
-        self.optimizer = optim.Adam(self.parameters(), lr=1e-3)
+        self.optimizer = optim.Adam(self.parameters(), lr=1e-4)
         self.batch_idx = 0
 
     def train_batch(self):
@@ -105,6 +107,7 @@ class VAENCA(Model, nn.Module):
         loss, z, p_x_given_z = self.forward(x, self.train_samples, self.train_loss_fn)
         loss.backward()
 
+        # t.nn.utils.clip_grad_norm_(self.parameters(), 10.0)
         for p in self.parameters():  # grad norm
             p.grad /= (t.norm(p.grad) + 1e-8)
 
