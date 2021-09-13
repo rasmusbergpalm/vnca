@@ -74,7 +74,7 @@ class VAENCA(Model, nn.Module):
         )
 
         update_net = DNAUpdate(self.z_size, self.hidden_size)
-        self.alive_channel = -1  # last DNA
+        self.alive_channel = 3  # last DNA
         self.nca = MitosisNCA(self.h, self.w, self.z_size, None, update_net, 5, 8, self.alive_channel, 1.0, 0.1)
 
         self.log_sigma = t.nn.Parameter(-2 * t.ones((4,), device=self.device), requires_grad=True)
