@@ -37,9 +37,10 @@ class MitosisNCA(t.nn.Module):
 
     def step(self, state):
         state.sg("bchw")
+        alive = state[:, self.alive_channel:self.alive_channel + 1, :, :]
         update = self.update_net(state)
 
-        return state + update
+        return state + update * alive
 
     def forward(self, state):
         state.sg("bchw")
