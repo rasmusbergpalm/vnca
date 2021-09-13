@@ -20,10 +20,10 @@ class MitosisNCA(t.nn.Module):
 
     def alive_mask(self, state):
         state.sg("bchw")
-        alive = (t.max_pool2d(state[:, self.alive_channel:self.alive_channel + 1, :, :], 3, stride=1, padding=1) > self.alive_threshold).to(t.float32)
+        alive = (t.max_pool2d(state[:, self.alive_channel, :, :].unsqueeze(1), 3, stride=1, padding=1) > self.alive_threshold).to(t.float32)
         return alive
 
-    def step(self, state):
+    def step2(self, state):
         state.sg("bchw")
         pre_alive = self.alive_mask(state)
 
@@ -35,7 +35,7 @@ class MitosisNCA(t.nn.Module):
         alive_mask = pre_alive * post_alive
         return state * alive_mask
 
-    def step2(self, state):
+    def step(self, state):
         state.sg("bchw")
         alive = state[:, self.alive_channel, :, :].unsqueeze(1)
         update = self.update_net(state)
