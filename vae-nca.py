@@ -33,9 +33,10 @@ class DNAUpdate(nn.Module):
             t.nn.ELU(),
             t.nn.Conv2d(hidden_dim, hidden_dim, 1),
             t.nn.ELU(),
-            t.nn.Conv2d(hidden_dim, state_dim, 1, bias=False)
+            t.nn.Conv2d(hidden_dim, state_dim, 1, bias=False),
+            t.nn.Tanh()
         )
-        self.update_net[-1].weight.data.fill_(0.0)
+        self.update_net[-2].weight.data.fill_(0.0)
 
     def forward(self, state):
         state.sg("Bzhw")
