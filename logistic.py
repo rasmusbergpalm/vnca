@@ -61,8 +61,18 @@ class DiscreteLogistic(Distribution):
 
 
 if __name__ == '__main__':
-    dl = DiscreteLogistic(t.tensor(0.5), t.tensor(-3), 0, 1, 1 / 256)
-    x = t.tensor([8/256, 128/256])
-    print(dl.log_prob(x))
-    print(dl.mean)
-    print(dl.batch_shape)
+    with t.no_grad():
+        dl = DiscreteLogistic(t.tensor(0.5), t.tensor(-3), 0, 1, 1 / 256)
+        x = t.arange(0, 256, 1)/255
+        print(x)
+        prob = dl.log_prob(x).exp()
+        print(prob)
+        import matplotlib.pyplot as plt
+
+        plt.plot(x.numpy(), prob.numpy())
+        # plt.plot(x.numpy(), t.cumsum(prob, 0).numpy(), 'r')
+        plt.show()
+
+        print(prob.sum())
+        print(dl.mean)
+        print(dl.batch_shape)

@@ -55,21 +55,29 @@ class VAENCA(Model, nn.Module):
         self.test_samples = 1
         self.hidden_size = 512
 
+        self.n_hid = 32
+        filter_size = (5, 5)
+        pad = tuple(s // 2 for s in filter_size)
+
         batch_size = 4
 
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
 
         self.encoder = nn.Sequential(
-            nn.Linear(self.h * self.w * 4, self.hidden_size), nn.ELU(),
-            nn.Linear(self.hidden_size, self.hidden_size), nn.ELU(),
-            nn.Linear(self.hidden_size, self.hidden_size), nn.ELU(),
-            nn.Linear(self.hidden_size, 2 * self.z_size)
+            nn.Conv2d(4, self.n_hid * 2 ** 0, filter_size, padding=pad), nn.ELU(),  # (bs, 32, 64, 64)
+            nn.Conv2d(self.n_hid * 2 ** 0, self.n_hid * 2 ** 1, filter_size, padding=pad, stride=2), nn.ELU(),  # (bs, 64, 32, 32)
+            nn.Conv2d(self.n_hid * 2 ** 1, self.n_hid * 2 ** 2, filter_size, padding=pad, stride=2), nn.ELU(),  # (bs, 128, 16, 16)
+            nn.Conv2d(self.n_hid * 2 ** 2, self.n_hid * 2 ** 3, filter_size, padding=pad, stride=2), nn.ELU(),  # (bs, 256, 8, 8)
+            nn.Conv2d(self.n_hid * 2 ** 3, self.n_hid * 2 ** 4, filter_size, padding=pad, stride=2), nn.ELU(),  # (bs, 512, 4, 4),
+            nn.Flatten(),  # (bs, 512*4*4)
+            nn.Linear(self.n_hid * (2 ** 4) * 4 * 4, 2 * self.z_size),
         )
+
         update_net = DNAUpdate(self.z_size, self.hidden_size)
         self.alive_channel = 3  # Alpha in RGBA
         self.nca = MitosisNCA(self.h, self.w, self.z_size, None, update_net, 5, 8, self.alive_channel, 1.0, 0.1)
 
-        self.log_sigma = t.nn.Parameter(t.tensor([-3.0, -3.0, -3.0, -3.0], device=self.device), requires_grad=True)
+        self.log_sigma = t.nn.Parameter(-2 * t.ones((4,), device=self.device), requires_grad=True)
         self.p_z = Normal(t.zeros(self.z_size, device=self.device), t.ones(self.z_size, device=self.device))
 
         data_dir = os.environ.get('DATA_DIR') or "."
@@ -174,7 +182,7 @@ class VAENCA(Model, nn.Module):
         writer.add_images("growth", growth, self.batch_idx)
 
     def encode(self, x) -> Distribution:  # q(z|x)
-        x.sg("Bx")
+        x.sg("B4hw")
         q = self.encoder(x).sg("BZ")
         loc = q[:, :self.z_size].sg("Bz")
         logsigma = q[:, self.z_size:].sg("Bz")
@@ -198,13 +206,14 @@ class VAENCA(Model, nn.Module):
     def forward(self, x, n_samples, loss_fn):
         ShapeGuard.reset()
         x.sg("B4hw")
-        x = x.to(self.device).reshape(x.shape[0], -1).sg("Bx")
+        x = x.to(self.device)
+        x_flat = x.reshape(x.shape[0], -1).sg("Bx")
         q_z_given_x = self.encode(x).sg("Bz")
         z = q_z_given_x.rsample((n_samples,)).permute((1, 0, 2)).sg("Bnz")
         decode, _ = self.decode(z)
         p_x_given_z = decode.sg("Bnx")
 
-        loss = loss_fn(x, p_x_given_z, q_z_given_x, z)
+        loss = loss_fn(x_flat, p_x_given_z, q_z_given_x, z)
         return loss, z, p_x_given_z
 
     def iwae_loss_fn(self, x: t.Tensor, p_x_given_z: Distribution, q_z_given_x: Distribution, z: t.Tensor) -> t.Tensor:
