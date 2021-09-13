@@ -77,7 +77,8 @@ class VAENCA(Model, nn.Module):
         self.alive_channel = 3  # Alpha in RGBA
         self.nca = MitosisNCA(self.h, self.w, self.z_size, None, update_net, 5, 8, self.alive_channel, 1.0, 0.1)
 
-        self.log_sigma = t.nn.Parameter(-2 * t.ones((4,), device=self.device), requires_grad=True)
+        # self.log_sigma = t.nn.Parameter(-2 * t.ones((4,), device=self.device), requires_grad=True)
+        self.register_buffer("log_sigma", t.scalar_tensor(-2.0, device=self.device))
         self.p_z = Normal(t.zeros(self.z_size, device=self.device), t.ones(self.z_size, device=self.device))
 
         data_dir = os.environ.get('DATA_DIR') or "."
@@ -93,7 +94,7 @@ class VAENCA(Model, nn.Module):
             print(n, p.shape)
 
         self.to(self.device)
-        self.optimizer = optim.Adam(self.parameters(), lr=1e-3)
+        self.optimizer = optim.Adam(self.parameters(), lr=1e-4)
         self.batch_idx = 0
 
     def train_batch(self):
@@ -199,9 +200,8 @@ class VAENCA(Model, nn.Module):
 
         state = states[-1]
         loc = state[:, :4, :, :].sg("b4hw").reshape((bs, ns, -1)).sg("Bnx")
-        logscale = self.log_sigma.unsqueeze(0).unsqueeze(2).unsqueeze(3).sg((1, 4, 1, 1)).expand_as(state[:, :4, :, :]).reshape((bs, ns, -1)).sg("Bnx")
 
-        return DiscreteLogistic(loc, logscale, 0, 1, 1 / 256), states
+        return DiscreteLogistic(loc, self.log_sigma * t.ones_like(loc), 0, 1, 1 / 256), states
 
     def forward(self, x, n_samples, loss_fn):
         ShapeGuard.reset()
@@ -213,8 +213,27 @@ class VAENCA(Model, nn.Module):
         decode, _ = self.decode(z)
         p_x_given_z = decode.sg("Bnx")
 
+        if self.training:
+            batch_log_sigma = self.find_optimal_log_sigma(p_x_given_z, x_flat)
+            p = 0.99
+            self.log_sigma = p * self.log_sigma + (1 - p) * batch_log_sigma
+
         loss = loss_fn(x_flat, p_x_given_z, q_z_given_x, z)
         return loss, z, p_x_given_z
+
+    def find_optimal_log_sigma(self, p_x_given_z, x_flat):
+        batch_log_sigma = t.nn.Parameter(self.log_sigma.detach())
+        lbfgs = t.optim.LBFGS([batch_log_sigma], line_search_fn='strong_wolfe', lr=1.0)
+
+        def closure():
+            lbfgs.zero_grad()
+            dl = DiscreteLogistic(p_x_given_z.mean.detach(), batch_log_sigma * t.ones_like(p_x_given_z.mean.detach()), 0, 1, 1 / 256)
+            loss = -dl.log_prob(x_flat.unsqueeze(1).expand_as(p_x_given_z.mean).detach()).sum(dim=2).mean()
+            loss.backward()
+            return loss
+
+        lbfgs.step(closure)
+        return batch_log_sigma.detach()
 
     def iwae_loss_fn(self, x: t.Tensor, p_x_given_z: Distribution, q_z_given_x: Distribution, z: t.Tensor) -> t.Tensor:
         """
