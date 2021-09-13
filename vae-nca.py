@@ -93,7 +93,7 @@ class VAENCA(Model, nn.Module):
             print(n, p.shape)
 
         self.to(self.device)
-        self.optimizer = optim.Adam(self.parameters(), lr=1e-4)
+        self.optimizer = optim.Adam(self.parameters(), lr=1e-3)
         self.batch_idx = 0
 
     def train_batch(self):
