@@ -107,9 +107,9 @@ class VAENCA(Model, nn.Module):
         loss, z, p_x_given_z = self.forward(x, self.train_samples, self.train_loss_fn)
         loss.backward()
 
-        # t.nn.utils.clip_grad_norm_(self.parameters(), 10.0)
-        for p in self.parameters():  # grad norm
-            p.grad /= (t.norm(p.grad) + 1e-8)
+        t.nn.utils.clip_grad_norm_(self.parameters(), 10.0)
+        # for p in self.parameters():  # grad norm
+        #    p.grad /= (t.norm(p.grad) + 1e-8)
 
         self.optimizer.step()
 
