@@ -80,7 +80,7 @@ class VAENCA(Model, nn.Module):
         self.alive_channel = -1  # last DNA
         self.nca = MitosisNCA(self.h, self.w, self.z_size, None, update_net, 5, 8, self.alive_channel, 1.0, 0.1)
 
-        self.log_sigma = t.nn.Parameter(-2 * t.ones((4,), device=self.device), requires_grad=True)
+        # self.log_sigma = t.nn.Parameter(-2 * t.ones((4,), device=self.device), requires_grad=True)
         self.p_z = Normal(t.zeros(self.z_size, device=self.device), t.ones(self.z_size, device=self.device))
 
         data_dir = os.environ.get('DATA_DIR') or "."
@@ -114,7 +114,7 @@ class VAENCA(Model, nn.Module):
         self.optimizer.step()
 
         if self.batch_idx % 100 == 0:
-            self.report(self.train_writer, loss)
+            self.report(self.train_writer, p_x_given_z, loss)
 
         self.batch_idx += 1
         return loss.item()
@@ -137,7 +137,7 @@ class VAENCA(Model, nn.Module):
         with t.no_grad():
             x, y = next(self.test_loader)
             loss, z, p_x_given_z = self.forward(x, self.test_samples, self.test_loss_fn)
-            self.report(self.test_writer, loss)
+            self.report(self.test_writer, p_x_given_z, loss)
         return loss.item()
 
     def _plot_samples(self):
@@ -146,21 +146,28 @@ class VAENCA(Model, nn.Module):
             samples = self.p_z.sample((64, 1)).to(self.device)
             decode, states = self.decode(samples)
             samples = t.clip(decode.mean, 0, 1).reshape(64, 4, self.h, self.w).cpu().detach().numpy()
-            samples = samples[:, :3, :, :] * samples[:, 3:4, :, :]
+            samples = self.to_rgb(samples)
+            # rgb=0.3, alpha=0 --> samples = 1-0+0.3*0 = 1 = white
+            # rgb = 0.3, alpha=1 --> samples = 1-1+0.3*1 = 0.3
+            # rgb = 0.3, alpha=0.5, samples = 1-0.5+0.3*0.5 = 0.5+0.15 = 0.65
 
             growth = []
             for state in states:
                 state = t.clip(state[0:1, :4, :, :], 0, 1)
-                state = state[:, :3, :, :] * state[:, 3:4, :, :]  # (1, 3, h, w)
-                growth.append(state)
+                growth.append(self.to_rgb(state))
             growth = t.cat(growth, dim=0).cpu().detach().numpy()  # (n_states, 3, h, w)
 
             x, y = next(self.test_loader)
             _, _, p_x_given_z = self.forward(x[:64], 1, self.iwae_loss_fn)
             recons = t.clip(p_x_given_z.mean, 0, 1).reshape(-1, 4, self.h, self.w).cpu().detach().numpy()
-            recons = recons[:, :3, :, :] * recons[:, 3:4, :, :]
+            recons = self.to_rgb(recons)
 
         return samples, recons, growth
+
+    def to_rgb(self, samples):
+        rgb = samples[:, :3, :, :]
+        alpha = samples[:, 3:4, :, :]
+        return 1.0 - alpha + rgb * alpha
 
     def plot_growth_samples(self):
         ShapeGuard.reset()
@@ -169,15 +176,15 @@ class VAENCA(Model, nn.Module):
             _, states = self.decode(samples)
             for i, state in enumerate(states):
                 samples = t.clip(state[:, :4, :, :], 0, 1).cpu().detach().numpy()
-                samples = samples[:, :3, :, :] * samples[:, 3:4, :, :]  # (64, 3, h, w)
+                samples = self.to_rgb(samples)
                 samples = (samples * 255).astype(np.uint8)
                 grid = make_grid(samples).transpose(1, 2, 0)  # (HWC)
                 im = Image.fromarray(grid)
                 im.save("samples-%03d.png" % i)
 
-    def report(self, writer: SummaryWriter, loss):
+    def report(self, writer: SummaryWriter, p_x_given_z, loss):
         writer.add_scalar('loss', loss.item(), self.batch_idx)
-        writer.add_scalar('log_sigma', self.log_sigma.mean().item(), self.batch_idx)
+        writer.add_scalar('log_sigma', p_x_given_z.logscale.mean().item(), self.batch_idx)
 
         samples, recons, growth = self._plot_samples()
         # writer.add_images("grid", grid, self.batch_idx)
@@ -203,7 +210,8 @@ class VAENCA(Model, nn.Module):
 
         state = states[-1]
         loc = state[:, :4, :, :].sg("b4hw").reshape((bs, ns, -1)).sg("Bnx")
-        logscale = self.log_sigma.unsqueeze(0).unsqueeze(2).unsqueeze(3).sg((1, 4, 1, 1)).expand_as(state[:, :4, :, :]).reshape((bs, ns, -1)).sg("Bnx")
+        logscale = state[:, 4:8, :, :].sg("b4hw").reshape((bs, ns, -1)).sg("Bnx")
+        # logscale = self.log_sigma.unsqueeze(0).unsqueeze(2).unsqueeze(3).sg((1, 4, 1, 1)).expand_as(state[:, :4, :, :]).reshape((bs, ns, -1)).sg("Bnx")
 
         return DiscreteLogistic(loc, logscale, 0, 1, 1 / 256), states
 
