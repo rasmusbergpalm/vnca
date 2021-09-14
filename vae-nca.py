@@ -11,7 +11,7 @@ from torch.distributions import Normal, Distribution, kl_divergence
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 from torch.utils.tensorboard._utils import make_grid
-from torchvision import transforms
+from torchvision import transforms, datasets
 
 from iterable_dataset_wrapper import IterableWrapper
 from logistic import DiscreteLogistic
@@ -86,7 +86,8 @@ class VAENCA(Model, nn.Module):
         data_dir = os.environ.get('DATA_DIR') or "."
 
         tp = transforms.Compose([transforms.Lambda(lambda img: img.convert("RGBA")), transforms.Resize((self.h, self.w)), transforms.ToTensor()])
-        train_data, val_data = NotoEmoji(data_dir, tp).train_val_split()  # datasets.CelebA(data_dir, split="train", download=True, transform=tp)
+        # train_data, val_data = NotoEmoji(data_dir, tp).train_val_split()  # datasets.CelebA(data_dir, split="train", download=True, transform=tp)
+        train_data, val_data = datasets.CelebA(data_dir, split="train", download=True, transform=tp), datasets.CelebA(data_dir, split="valid", download=True, transform=tp)
         self.train_loader = iter(DataLoader(IterableWrapper(train_data), batch_size=batch_size, pin_memory=True))
         self.test_loader = iter(DataLoader(IterableWrapper(val_data), batch_size=batch_size, pin_memory=True))
         self.train_writer, self.test_writer = get_writers("hierarchical-nca")
