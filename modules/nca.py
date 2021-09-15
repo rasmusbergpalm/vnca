@@ -17,6 +17,7 @@ class MitosisNCA(t.nn.Module):
         self.alive_channel = alive_channel
         self.p_update = p_update
         self.alive_threshold = alive_threshold
+        self.linear_skip = t.nn.Conv2d(state_dim, state_dim, kernel_size=1)
 
     def alive_mask(self, state):
         state.sg("bchw")
@@ -39,8 +40,9 @@ class MitosisNCA(t.nn.Module):
         state.sg("bchw")
         alive = state[:, self.alive_channel, :, :].unsqueeze(1)
         update = self.update_net(state)
-
-        return (state + update) * alive
+        new_state = (self.linear_skip(state) + update)
+        new_state[:, (self.state_dim // 2):, :, :] = state[:, (self.state_dim // 2):, :, :]  # keep DNA part
+        return new_state * alive
 
     def forward(self, state):
         state.sg("bchw")

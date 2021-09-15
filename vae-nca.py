@@ -44,7 +44,7 @@ class DNAUpdate(nn.Module):
     def forward(self, state):
         state.sg("Bzhw")
         update = self.update_net(state).sg("Bzhw")
-        update[:, (self.state_dim // 2):, :, :] = 0.0  # zero out the last half (DNA)
+        # update[:, (self.state_dim // 2):, :, :] = 0.0  # zero out the last half (DNA)
         return update
 
 
