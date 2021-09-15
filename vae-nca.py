@@ -258,7 +258,7 @@ class VAENCA(Model, nn.Module):
         logpx_given_z = p_x_given_z.log_prob(x.unsqueeze(1).expand_as(p_x_given_z.mean)).sum(dim=2).mean(dim=1).sg("B")
         kld = kl_divergence(q_z_given_x, self.p_z).sum(dim=1).sg("B")
 
-        return (-logpx_given_z / 4 + kld).mean()  # (1,)
+        return (-logpx_given_z + kld).mean()  # (1,)
 
 
 if __name__ == "__main__":
