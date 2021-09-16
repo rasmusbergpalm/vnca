@@ -57,7 +57,9 @@ class VAENCA(Model, nn.Module):
         self.train_samples = 1
         self.test_loss_fn = self.iwae_loss_fn
         self.test_samples = 1
-        self.hidden_size = 512
+        self.hidden_size = 256
+        self.dataset = "celeba"  # celeba
+        assert self.dataset in {'emoji', 'celeba'}
 
         self.n_hid = 32
         filter_size = (5, 5)
@@ -77,6 +79,10 @@ class VAENCA(Model, nn.Module):
             nn.Linear(self.n_hid * (2 ** 4) * 4 * 4, 2 * self.z_size),
         )
 
+        self.decoder = t.nn.Sequential(
+            t.nn.Conv2d(self.z_size, 8, kernel_size=1)
+        )
+
         update_net = DNAUpdate(self.z_size, self.hidden_size)
         self.alive_channel = -1  # last DNA
         self.nca = MitosisNCA(self.h, self.w, self.z_size, None, update_net, 5, 8, self.alive_channel, 1.0, 0.1)
@@ -87,8 +93,14 @@ class VAENCA(Model, nn.Module):
         data_dir = os.environ.get('DATA_DIR') or "."
 
         tp = transforms.Compose([transforms.Lambda(lambda img: img.convert("RGBA")), transforms.Resize((self.h, self.w)), transforms.ToTensor()])
-        # train_data, val_data = NotoEmoji(data_dir, tp).train_val_split()  # datasets.CelebA(data_dir, split="train", download=True, transform=tp)
-        train_data, val_data = datasets.CelebA(data_dir, split="train", download=True, transform=tp), datasets.CelebA(data_dir, split="valid", download=True, transform=tp)
+        if self.dataset == 'emoji':
+            train_data, val_data = NotoEmoji(data_dir, tp).train_val_split()
+            self.n_channels = 4
+        elif self.dataset == 'celeba':
+            train_data, val_data = datasets.CelebA(data_dir, split="train", download=True, transform=tp), datasets.CelebA(data_dir, split="valid", download=True, transform=tp)
+            self.n_channels = 3
+        else:
+            raise NotImplementedError()
         self.train_loader = iter(DataLoader(IterableWrapper(train_data), batch_size=batch_size, pin_memory=True))
         self.test_loader = iter(DataLoader(IterableWrapper(val_data), batch_size=batch_size, pin_memory=True))
         self.train_writer, self.test_writer = get_writers("hierarchical-nca")
@@ -186,6 +198,7 @@ class VAENCA(Model, nn.Module):
 
     def report(self, writer: SummaryWriter, p_x_given_z, loss):
         writer.add_scalar('loss', loss.item(), self.batch_idx)
+        writer.add_scalar('bpd', loss.item() / (np.log(2) * self.h * self.w * self.n_channels), self.batch_idx)
         writer.add_scalar('log_sigma', p_x_given_z.logscale.mean().item(), self.batch_idx)
 
         samples, recons, growth = self._plot_samples()
@@ -210,7 +223,10 @@ class VAENCA(Model, nn.Module):
         state = t.nn.functional.pad(z, pad, mode="constant", value=0)
         states = self.nca(state)
 
+        states = [self.decoder(state) for state in states]
+
         state = states[-1]
+
         loc = state[:, :4, :, :].sg("b4hw").reshape((bs, ns, -1)).sg("Bnx")
         logscale = state[:, 4:8, :, :].sg("b4hw").reshape((bs, ns, -1)).sg("Bnx")
         # logscale = self.log_sigma.unsqueeze(0).unsqueeze(2).unsqueeze(3).sg((1, 4, 1, 1)).expand_as(state[:, :4, :, :]).reshape((bs, ns, -1)).sg("Bnx")
