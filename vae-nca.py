@@ -65,7 +65,7 @@ class VAENCA(Model, nn.Module):
         filter_size = (5, 5)
         pad = tuple(s // 2 for s in filter_size)
 
-        batch_size = 32
+        batch_size = 16
 
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
 
