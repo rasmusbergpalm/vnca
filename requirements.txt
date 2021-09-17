@@ -27,7 +27,7 @@ six==1.16.0
 tensorboard==2.5.0
 tensorboard-data-server==0.6.1
 tensorboard-plugin-wit==1.8.0
-torch==1.8.1
+torch==1.9.0
 torch-shapeguard==1.0.3
 torchvision==0.9.1
 tqdm==4.60.0

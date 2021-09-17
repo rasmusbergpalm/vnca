@@ -61,8 +61,6 @@ class VAENCA(Model, nn.Module):
             t.nn.ELU(),
             t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
             t.nn.ELU(),
-            t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
-            t.nn.ELU(),
             t.nn.Conv2d(self.nca_hid, self.z_size, 1)
         )
         update_net[-1].weight.data.fill_(0.0)

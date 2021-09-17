@@ -27,14 +27,14 @@ class MitosisNCA(t.nn.Module):
         states = [state]
 
         for j in range(self.steps_per_duplication):
-            state = self.step(state)
+            state = t.utils.checkpoint.checkpoint(self.step, state)
             states.append(state)
 
         for i in range(self.n_duplications):
             state = t.repeat_interleave(t.repeat_interleave(state, 2, dim=2), 2, dim=3)  # cell division
             states.append(state)
             for j in range(self.steps_per_duplication):
-                state = self.step(state)
+                state = t.utils.checkpoint.checkpoint(self.step, state)
                 states.append(state)
 
         return states
