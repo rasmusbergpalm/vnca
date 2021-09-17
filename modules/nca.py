@@ -14,11 +14,12 @@ class MitosisNCA(t.nn.Module):
         self.device = "cuda" if t.cuda.is_available() else "cpu"
         self.update_net = update_net
         self.p_update = p_update
+        self.update_factor = t.nn.Parameter(t.scalar_tensor(-2, device=self.device), requires_grad=True)
 
     def step(self, state):
         state.sg("bc**")
         update = self.update_net(state)
-        new_state = (state + update)
+        new_state = (state + t.sigmoid(self.update_factor) * update)
         new_state[:, (self.state_dim // 2):, :, :] = state[:, (self.state_dim // 2):, :, :]  # keep DNA part
         return new_state
 

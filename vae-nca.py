@@ -28,12 +28,12 @@ class VAENCA(Model, nn.Module):
     def __init__(self):
         super(Model, self).__init__()
         self.h = self.w = 64
-        self.z_size = 512
+        self.z_size = 256
         self.train_loss_fn = self.elbo_loss_function
         self.train_samples = 1
         self.test_loss_fn = self.iwae_loss_fn
         self.test_samples = 1
-        self.nca_hid = 128
+        self.nca_hid = 256
         self.encoder_hid = 32
         batch_size = 32
         self.dataset = "emoji"  # celeba
