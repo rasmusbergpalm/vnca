@@ -28,15 +28,15 @@ class VAENCA(Model, nn.Module):
     def __init__(self):
         super(Model, self).__init__()
         self.h = self.w = 64
-        self.z_size = 256
+        self.z_size = 1024
         self.train_loss_fn = self.elbo_loss_function
         self.train_samples = 1
         self.test_loss_fn = self.iwae_loss_fn
         self.test_samples = 1
-        self.nca_hid = 512
+        self.nca_hid = 128
         self.encoder_hid = 32
         batch_size = 32
-        self.dataset = "celeba"  # celeba
+        self.dataset = "emoji"  # celeba
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         assert self.dataset in {'emoji', 'celeba'}
 
@@ -58,8 +58,6 @@ class VAENCA(Model, nn.Module):
 
         update_net = t.nn.Sequential(
             t.nn.Conv2d(self.z_size, self.nca_hid, 3, padding=1),
-            t.nn.ELU(),
-            t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
             t.nn.ELU(),
             t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
             t.nn.ELU(),
