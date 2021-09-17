@@ -33,10 +33,10 @@ class VAENCA(Model, nn.Module):
         self.train_samples = 1
         self.test_loss_fn = self.iwae_loss_fn
         self.test_samples = 1
-        self.nca_hid = 256
+        self.nca_hid = 512
         self.encoder_hid = 32
         batch_size = 32
-        self.dataset = "emoji"  # celeba
+        self.dataset = "celeba"  # celeba
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         assert self.dataset in {'emoji', 'celeba'}
 
@@ -61,12 +61,14 @@ class VAENCA(Model, nn.Module):
             t.nn.ELU(),
             t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
             t.nn.ELU(),
+            t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
+            t.nn.ELU(),
             t.nn.Conv2d(self.nca_hid, self.z_size, 1)
         )
         update_net[-1].weight.data.fill_(0.0)
         update_net[-1].bias.data.fill_(0.0)
 
-        self.nca = MitosisNCA(self.h, self.w, self.z_size, update_net, 5, 16, 1.0)
+        self.nca = MitosisNCA(self.h, self.w, self.z_size, update_net, 5, 8, 1.0)
 
         # self.log_sigma = t.nn.Parameter(-2 * t.ones((4,), device=self.device), requires_grad=True)
         self.p_z = Normal(t.zeros(self.z_size, device=self.device), t.ones(self.z_size, device=self.device))
