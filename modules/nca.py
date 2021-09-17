@@ -15,10 +15,10 @@ class MitosisNCA(t.nn.Module):
         self.update_net = update_net
         self.p_update = p_update
 
-    def step(self, state):
+    def step(self, state, rand_update_mask):
         state.sg("bc**")
         update = self.update_net(state)
-        new_state = (state + update)
+        new_state = (state + update * rand_update_mask)
         new_state[:, (self.state_dim // 2):, :, :] = state[:, (self.state_dim // 2):, :, :]  # keep DNA part
         return new_state
 
@@ -27,14 +27,16 @@ class MitosisNCA(t.nn.Module):
         states = [state]
 
         for j in range(self.steps_per_duplication):
-            state = t.utils.checkpoint.checkpoint(self.step, state)
+            rand_update_mask = (t.rand((state.shape[0], 1, state.shape[2], state.shape[3]), device=self.device) < self.p_update).to(t.float32)
+            state = t.utils.checkpoint.checkpoint(self.step, state, rand_update_mask)
             states.append(state)
 
         for i in range(self.n_duplications):
             state = t.repeat_interleave(t.repeat_interleave(state, 2, dim=2), 2, dim=3)  # cell division
             states.append(state)
             for j in range(self.steps_per_duplication):
-                state = t.utils.checkpoint.checkpoint(self.step, state)
+                rand_update_mask = (t.rand((state.shape[0], 1, state.shape[2], state.shape[3]), device=self.device) < self.p_update).to(t.float32)
+                state = t.utils.checkpoint.checkpoint(self.step, state, rand_update_mask)
                 states.append(state)
 
         return states

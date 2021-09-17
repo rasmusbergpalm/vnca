@@ -66,7 +66,7 @@ class VAENCA(Model, nn.Module):
         update_net[-1].weight.data.fill_(0.0)
         update_net[-1].bias.data.fill_(0.0)
 
-        self.nca = MitosisNCA(self.h, self.w, self.z_size, update_net, 5, 8, 1.0)
+        self.nca = MitosisNCA(self.h, self.w, self.z_size, update_net, 5, 8, 0.5)
 
         # self.log_sigma = t.nn.Parameter(-2 * t.ones((4,), device=self.device), requires_grad=True)
         self.p_z = Normal(t.zeros(self.z_size, device=self.device), t.ones(self.z_size, device=self.device))
