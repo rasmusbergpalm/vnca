@@ -56,6 +56,7 @@ class VAENCA(Model, nn.Module):
         self.test_loss_fn = self.iwae_loss_fn
         self.test_samples = 1
         self.hidden_size = 128
+
         self.dataset = "emoji"  # celeba
         assert self.dataset in {'emoji', 'celeba'}
 
