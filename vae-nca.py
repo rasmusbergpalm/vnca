@@ -34,8 +34,6 @@ class DNAUpdate(nn.Module):
             t.nn.ELU(),
             t.nn.Conv2d(hidden_dim, hidden_dim, 1),
             t.nn.ELU(),
-            t.nn.Conv2d(hidden_dim, hidden_dim, 1),
-            t.nn.ELU(),
             t.nn.Conv2d(hidden_dim, state_dim, 1)
         )
         self.update_net[-1].weight.data.fill_(0.0)
@@ -52,12 +50,12 @@ class VAENCA(Model, nn.Module):
     def __init__(self):
         super(Model, self).__init__()
         self.h = self.w = 64
-        self.z_size = 32
+        self.z_size = 256
         self.train_loss_fn = self.elbo_loss_function
         self.train_samples = 1
         self.test_loss_fn = self.iwae_loss_fn
         self.test_samples = 1
-        self.hidden_size = 512
+        self.hidden_size = 256
         self.dataset = "emoji"  # celeba
         assert self.dataset in {'emoji', 'celeba'}
 
@@ -79,9 +77,9 @@ class VAENCA(Model, nn.Module):
             nn.Linear(self.n_hid * (2 ** 4) * 4 * 4, 2 * self.z_size),
         )
 
-        self.decoder = t.nn.Sequential(
-            t.nn.Conv2d(self.z_size, 8, kernel_size=1)
-        )
+        # self.decoder = t.nn.Sequential(
+        #    t.nn.Conv2d(self.z_size, 8, kernel_size=1)
+        # )
 
         update_net = DNAUpdate(self.z_size, self.hidden_size)
         self.alive_channel = -1  # last DNA
@@ -223,7 +221,7 @@ class VAENCA(Model, nn.Module):
         state = t.nn.functional.pad(z, pad, mode="constant", value=0)
         states = self.nca(state)
 
-        states = [self.decoder(state) for state in states]
+        # states = [self.decoder(state) for state in states]
 
         state = states[-1]
 
