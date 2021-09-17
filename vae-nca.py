@@ -33,7 +33,7 @@ class VAENCA(Model, nn.Module):
         self.train_samples = 1
         self.test_loss_fn = self.iwae_loss_fn
         self.test_samples = 1
-        self.nca_hid = 256
+        self.nca_hid = 512
         self.encoder_hid = 32
         batch_size = 32
         self.dataset = "emoji"  # celeba
@@ -58,6 +58,8 @@ class VAENCA(Model, nn.Module):
 
         update_net = t.nn.Sequential(
             t.nn.Conv2d(self.z_size, self.nca_hid, 3, padding=1),
+            t.nn.ELU(),
+            t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
             t.nn.ELU(),
             t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
             t.nn.ELU(),
