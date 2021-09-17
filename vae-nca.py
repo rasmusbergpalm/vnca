@@ -99,7 +99,7 @@ class VAENCA(Model, nn.Module):
 
         self.optimizer.zero_grad()
         x, y = next(self.train_loader)
-        loss, z, p_x_given_z = self.forward(x, self.train_samples, self.train_loss_fn)
+        loss, z, p_x_given_z, recon_loss, kl_loss = self.forward(x, self.train_samples, self.train_loss_fn)
         loss.backward()
 
         t.nn.utils.clip_grad_norm_(self.parameters(), 10.0)
@@ -107,7 +107,7 @@ class VAENCA(Model, nn.Module):
         self.optimizer.step()
 
         if self.batch_idx % 100 == 0:
-            self.report(self.train_writer, p_x_given_z, loss)
+            self.report(self.train_writer, p_x_given_z, loss, recon_loss, kl_loss)
 
         self.batch_idx += 1
         return loss.item()
@@ -129,8 +129,8 @@ class VAENCA(Model, nn.Module):
         self.train(False)
         with t.no_grad():
             x, y = next(self.test_loader)
-            loss, z, p_x_given_z = self.forward(x, self.test_samples, self.test_loss_fn)
-            self.report(self.test_writer, p_x_given_z, loss)
+            loss, z, p_x_given_z, recon_loss, kl_loss = self.forward(x, self.test_samples, self.test_loss_fn)
+            self.report(self.test_writer, p_x_given_z, loss, recon_loss, kl_loss)
         return loss.item()
 
     def _plot_samples(self):
@@ -179,10 +179,14 @@ class VAENCA(Model, nn.Module):
                 im = Image.fromarray(grid)
                 im.save("samples-%03d.png" % i)
 
-    def report(self, writer: SummaryWriter, p_x_given_z, loss):
+    def report(self, writer: SummaryWriter, p_x_given_z, loss, recon_loss, kl_loss):
         writer.add_scalar('loss', loss.item(), self.batch_idx)
         writer.add_scalar('bpd', loss.item() / (np.log(2) * self.h * self.w * self.n_channels), self.batch_idx)
         writer.add_scalar('log_sigma', p_x_given_z.logscale.mean().item(), self.batch_idx)
+        if recon_loss:
+            writer.add_scalar('recon_loss', recon_loss.item(), self.batch_idx)
+        if kl_loss:
+            writer.add_scalar('kl_loss', kl_loss.item(), self.batch_idx)
 
         samples, recons, growth = self._plot_samples()
         # writer.add_images("grid", grid, self.batch_idx)
@@ -223,10 +227,10 @@ class VAENCA(Model, nn.Module):
         decode, _ = self.decode(z)
         p_x_given_z = decode.sg("Bnx")
 
-        loss = loss_fn(x_flat, p_x_given_z, q_z_given_x, z)
-        return loss, z, p_x_given_z
+        loss, recon_loss, kl_loss = loss_fn(x_flat, p_x_given_z, q_z_given_x, z)
+        return loss, z, p_x_given_z, recon_loss, kl_loss
 
-    def iwae_loss_fn(self, x: t.Tensor, p_x_given_z: Distribution, q_z_given_x: Distribution, z: t.Tensor) -> t.Tensor:
+    def iwae_loss_fn(self, x: t.Tensor, p_x_given_z: Distribution, q_z_given_x: Distribution, z: t.Tensor):
         """
           log(p(x)) >= logsumexp_{i=1}^N[ log(p(x|z_i)) + log(p(z_i)) - log(q(z_i|x))] - log(N)
         """
@@ -239,9 +243,9 @@ class VAENCA(Model, nn.Module):
         logpz = self.p_z.log_prob(z).sum(dim=2).sg("Bn")
         logqz_given_x = q_z_given_x.log_prob(z.permute((1, 0, 2))).sum(dim=2).permute((1, 0)).sg("Bn")
         logpx = (t.logsumexp(logpx_given_z + logpz - logqz_given_x, dim=1) - t.log(t.scalar_tensor(z.shape[1]))).sg("B")
-        return -logpx.mean()  # (1,)
+        return -logpx.mean(), None, None  # (1,)
 
-    def elbo_loss_function(self, x: t.Tensor, p_x_given_z: Distribution, q_z_given_x: Distribution, z: t.Tensor) -> t.Tensor:
+    def elbo_loss_function(self, x: t.Tensor, p_x_given_z: Distribution, q_z_given_x: Distribution, z: t.Tensor):
         """
           log p(x) >= E_q(z|x) [ log p(x|z) p(z) / q(z|x) ]
           Reconstruction + KL divergence losses summed over all elements and batch
@@ -254,7 +258,10 @@ class VAENCA(Model, nn.Module):
         logpx_given_z = p_x_given_z.log_prob(x.unsqueeze(1).expand_as(p_x_given_z.mean)).sum(dim=2).mean(dim=1).sg("B")
         kld = kl_divergence(q_z_given_x, self.p_z).sum(dim=1).sg("B")
 
-        return (-logpx_given_z + kld).mean()  # (1,)
+        reconstruction_loss = -logpx_given_z.mean()
+        kl_loss = kld.mean()
+        loss = reconstruction_loss + kl_loss
+        return loss, reconstruction_loss, kl_loss  # (1,)
 
 
 if __name__ == "__main__":
