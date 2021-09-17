@@ -155,7 +155,7 @@ class VAENCA(Model, nn.Module):
             growth = t.cat(growth, dim=0).cpu().detach().numpy()  # (n_states, 3, h, w)
 
             x, y = next(self.test_loader)
-            _, _, p_x_given_z = self.forward(x[:64], 1, self.iwae_loss_fn)
+            _, _, p_x_given_z, _, _ = self.forward(x[:64], 1, self.iwae_loss_fn)
             recons = t.clip(p_x_given_z.mean, 0, 1).reshape(-1, 4, self.h, self.w).cpu().detach().numpy()
             recons = self.to_rgb(recons)
 
