@@ -24,28 +24,6 @@ from util import get_writers
 
 # torch.autograd.set_detect_anomaly(True)
 
-
-class DNAUpdate(nn.Module):
-    def __init__(self, state_dim, hidden_dim):
-        super().__init__()
-        self.state_dim = state_dim
-        self.update_net = t.nn.Sequential(
-            t.nn.Conv2d(state_dim, hidden_dim, 3, padding=1),
-            t.nn.ELU(),
-            t.nn.Conv2d(hidden_dim, hidden_dim, 1),
-            t.nn.ELU(),
-            t.nn.Conv2d(hidden_dim, state_dim, 1)
-        )
-        self.update_net[-1].weight.data.fill_(0.0)
-        self.update_net[-1].bias.data.fill_(0.0)
-
-    def forward(self, state):
-        state.sg("Bzhw")
-        update = self.update_net(state).sg("Bzhw")
-        # update[:, (self.state_dim // 2):, :, :] = 0.0  # zero out the last half (DNA)
-        return update
-
-
 class VAENCA(Model, nn.Module):
     def __init__(self):
         super(Model, self).__init__()
@@ -55,36 +33,40 @@ class VAENCA(Model, nn.Module):
         self.train_samples = 1
         self.test_loss_fn = self.iwae_loss_fn
         self.test_samples = 1
-        self.hidden_size = 128
-
+        self.nca_hid = 256
+        self.encoder_hid = 32
         self.dataset = "emoji"  # celeba
+        batch_size = 4
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
         assert self.dataset in {'emoji', 'celeba'}
 
-        self.n_hid = 32
         filter_size = (5, 5)
         pad = tuple(s // 2 for s in filter_size)
-
-        batch_size = 4
-
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
-
         self.encoder = nn.Sequential(
-            nn.Conv2d(4, self.n_hid * 2 ** 0, filter_size, padding=pad), nn.ELU(),  # (bs, 32, 64, 64)
-            nn.Conv2d(self.n_hid * 2 ** 0, self.n_hid * 2 ** 1, filter_size, padding=pad, stride=2), nn.ELU(),  # (bs, 64, 32, 32)
-            nn.Conv2d(self.n_hid * 2 ** 1, self.n_hid * 2 ** 2, filter_size, padding=pad, stride=2), nn.ELU(),  # (bs, 128, 16, 16)
-            nn.Conv2d(self.n_hid * 2 ** 2, self.n_hid * 2 ** 3, filter_size, padding=pad, stride=2), nn.ELU(),  # (bs, 256, 8, 8)
-            nn.Conv2d(self.n_hid * 2 ** 3, self.n_hid * 2 ** 4, filter_size, padding=pad, stride=2), nn.ELU(),  # (bs, 512, 4, 4),
+            nn.Conv2d(4, self.encoder_hid * 2 ** 0, filter_size, padding=pad), nn.ELU(),  # (bs, 32, 64, 64)
+            nn.Conv2d(self.encoder_hid * 2 ** 0, self.encoder_hid * 2 ** 1, filter_size, padding=pad, stride=2), nn.ELU(),  # (bs, 64, 32, 32)
+            nn.Conv2d(self.encoder_hid * 2 ** 1, self.encoder_hid * 2 ** 2, filter_size, padding=pad, stride=2), nn.ELU(),  # (bs, 128, 16, 16)
+            nn.Conv2d(self.encoder_hid * 2 ** 2, self.encoder_hid * 2 ** 3, filter_size, padding=pad, stride=2), nn.ELU(),  # (bs, 256, 8, 8)
+            nn.Conv2d(self.encoder_hid * 2 ** 3, self.encoder_hid * 2 ** 4, filter_size, padding=pad, stride=2), nn.ELU(),  # (bs, 512, 4, 4),
             nn.Flatten(),  # (bs, 512*4*4)
-            nn.Linear(self.n_hid * (2 ** 4) * 4 * 4, 2 * self.z_size),
+            nn.Linear(self.encoder_hid * (2 ** 4) * 4 * 4, 2 * self.z_size),
         )
 
         # self.decoder = t.nn.Sequential(
         #    t.nn.Conv2d(self.z_size, 8, kernel_size=1)
         # )
 
-        update_net = DNAUpdate(self.z_size, self.hidden_size)
-        self.alive_channel = -1  # last DNA
-        self.nca = MitosisNCA(self.h, self.w, self.z_size, None, update_net, 5, 8, self.alive_channel, 1.0, 0.1)
+        update_net = t.nn.Sequential(
+            t.nn.Conv2d(self.z_size, self.nca_hid, 3, padding=1),
+            t.nn.ELU(),
+            t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
+            t.nn.ELU(),
+            t.nn.Conv2d(self.nca_hid, self.z_size, 1)
+        )
+        update_net[-1].weight.data.fill_(0.0)
+        update_net[-1].bias.data.fill_(0.0)
+
+        self.nca = MitosisNCA(self.h, self.w, self.z_size, update_net, 5, 8, 1.0)
 
         # self.log_sigma = t.nn.Parameter(-2 * t.ones((4,), device=self.device), requires_grad=True)
         self.p_z = Normal(t.zeros(self.z_size, device=self.device), t.ones(self.z_size, device=self.device))
@@ -121,8 +103,6 @@ class VAENCA(Model, nn.Module):
         loss.backward()
 
         t.nn.utils.clip_grad_norm_(self.parameters(), 10.0)
-        # for p in self.parameters():  # grad norm
-        #    p.grad /= (t.norm(p.grad) + 1e-8)
 
         self.optimizer.step()
 
@@ -167,7 +147,11 @@ class VAENCA(Model, nn.Module):
             growth = []
             for state in states:
                 state = t.clip(state[0:1, :4, :, :], 0, 1)
-                growth.append(self.to_rgb(state))
+                rgb = self.to_rgb(state)
+                h = state.shape[3]
+                pad = (self.h - h) // 2
+                rgb = t.nn.functional.pad(rgb, [pad] * 4, mode="constant", value=0)
+                growth.append(rgb)
             growth = t.cat(growth, dim=0).cpu().detach().numpy()  # (n_states, 3, h, w)
 
             x, y = next(self.test_loader)
@@ -216,10 +200,7 @@ class VAENCA(Model, nn.Module):
     def decode(self, z: t.Tensor) -> Tuple[Distribution, Sequence[t.Tensor]]:  # p(x|z)
         z.sg("Bnz")
         bs, ns, zs = z.shape
-        z[:, :, self.alive_channel] = 1.0  # Force the seed cells to be alive
-        z = z.reshape((-1, self.z_size)).unsqueeze(2).unsqueeze(3).expand(-1, -1, 2, 2).sg("bz22")
-        pad = [self.h // 2 - 1, self.h // 2 - 1, self.w // 2 - 1, self.w // 2 - 1]
-        state = t.nn.functional.pad(z, pad, mode="constant", value=0)
+        state = z.reshape((-1, self.z_size)).unsqueeze(2).unsqueeze(3).expand(-1, -1, 2, 2).sg("bz22")
         states = self.nca(state)
 
         # states = [self.decoder(state) for state in states]
