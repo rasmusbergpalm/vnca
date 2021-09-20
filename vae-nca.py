@@ -64,8 +64,8 @@ class VAENCA(Model, nn.Module):
             t.nn.ELU(),
             weight_norm(t.nn.Conv2d(self.nca_hid, self.z_size, 1))
         )
-        update_net[-1].weight.data.fill_(0.0)
-        update_net[-1].bias.data.fill_(0.0)
+        # update_net[-1].weight.data.fill_(0.0)
+        # update_net[-1].bias.data.fill_(0.0)
 
         self.nca = MitosisNCA(self.h, self.w, self.z_size, update_net, 5, 8, 1.0)
 
