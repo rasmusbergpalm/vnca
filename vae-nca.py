@@ -55,22 +55,45 @@ class VAENCA(Model, nn.Module):
         # self.decoder = t.nn.Sequential(
         #    t.nn.Conv2d(self.z_size, 8, kernel_size=1)
         # )
+        class Residual(torch.nn.Module):
+            def __init__(self, *args: t.nn.Module):
+                super().__init__()
+                self.modules = args
+
+            def forward(self, inputs):
+                x = inputs
+                for module in self.modules:
+                    x = module(x)
+
+                return x + inputs
 
         update_net = t.nn.Sequential(
             t.nn.Conv2d(self.z_size, self.nca_hid, 3, padding=1),
             t.nn.ELU(),
-            t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
-            t.nn.ELU(),
-            t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
-            t.nn.ELU(),
-            t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
-            t.nn.ELU(),
-            t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
-            t.nn.ELU(),
-            t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
-            t.nn.ELU(),
-            t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
-            t.nn.ELU(),
+            Residual(
+                t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
+                t.nn.ELU()
+            ),
+            Residual(
+                t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
+                t.nn.ELU()
+            ),
+            Residual(
+                t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
+                t.nn.ELU()
+            ),
+            Residual(
+                t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
+                t.nn.ELU()
+            ),
+            Residual(
+                t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
+                t.nn.ELU()
+            ),
+            Residual(
+                t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
+                t.nn.ELU()
+            ),
             t.nn.Conv2d(self.nca_hid, self.z_size, 1)
         )
         update_net[-1].weight.data.fill_(0.0)
