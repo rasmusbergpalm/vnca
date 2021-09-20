@@ -61,6 +61,16 @@ class VAENCA(Model, nn.Module):
             t.nn.ELU(),
             t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
             t.nn.ELU(),
+            t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
+            t.nn.ELU(),
+            t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
+            t.nn.ELU(),
+            t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
+            t.nn.ELU(),
+            t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
+            t.nn.ELU(),
+            t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
+            t.nn.ELU(),
             t.nn.Conv2d(self.nca_hid, self.z_size, 1)
         )
         update_net[-1].weight.data.fill_(0.0)
@@ -212,8 +222,8 @@ class VAENCA(Model, nn.Module):
         state = states[-1]
 
         loc = state[:, :4, :, :].sg("b4hw").reshape((bs, ns, -1)).sg("Bnx")
-        # logscale = state[:, 4:8, :, :].sg("b4hw").reshape((bs, ns, -1)).sg("Bnx")
-        logscale = t.zeros_like(loc)
+        logscale = state[:, 4:8, :, :].sg("b4hw").reshape((bs, ns, -1)).sg("Bnx")
+        # logscale = t.zeros_like(loc)
         # logscale = self.log_sigma.unsqueeze(0).unsqueeze(2).unsqueeze(3).sg((1, 4, 1, 1)).expand_as(state[:, :4, :, :]).reshape((bs, ns, -1)).sg("Bnx")
 
         return DiscreteLogistic(loc, logscale, 0, 1, 1 / 256), states
