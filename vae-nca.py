@@ -68,27 +68,33 @@ class VAENCA(Model, nn.Module):
             t.nn.ELU(),
             Residual(
                 t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
-                t.nn.ELU()
+                t.nn.ELU(),
+                t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
             ),
             Residual(
                 t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
-                t.nn.ELU()
+                t.nn.ELU(),
+                t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
             ),
             Residual(
                 t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
-                t.nn.ELU()
+                t.nn.ELU(),
+                t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
             ),
             Residual(
                 t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
-                t.nn.ELU()
+                t.nn.ELU(),
+                t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
             ),
             Residual(
                 t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
-                t.nn.ELU()
+                t.nn.ELU(),
+                t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
             ),
             Residual(
                 t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
-                t.nn.ELU()
+                t.nn.ELU(),
+                t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
             ),
             t.nn.Conv2d(self.nca_hid, self.z_size, 1)
         )
