@@ -8,7 +8,6 @@ from PIL import Image
 from shapeguard import ShapeGuard
 from torch import nn, optim
 from torch.distributions import Normal, Distribution, kl_divergence
-from torch.nn.utils import weight_norm
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 from torch.utils.tensorboard._utils import make_grid
@@ -37,8 +36,8 @@ class VAENCA(Model, nn.Module):
         self.nca_hid = 256
         self.encoder_hid = 32
         batch_size = 32
-        self.dataset = "emoji"  # celeba
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.dataset = "celeba"  # celeba
         assert self.dataset in {'emoji', 'celeba'}
 
         filter_size = (5, 5)
@@ -58,9 +57,9 @@ class VAENCA(Model, nn.Module):
         # )
 
         update_net = t.nn.Sequential(
-            weight_norm(t.nn.Conv2d(self.z_size, self.nca_hid, 3, padding=1)),
+            t.nn.Conv2d(self.z_size, self.nca_hid, 3, padding=1),
             t.nn.ELU(),
-            weight_norm(t.nn.Conv2d(self.nca_hid, self.nca_hid, 1)),
+            t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
             t.nn.ELU(),
             t.nn.Conv2d(self.nca_hid, self.z_size, 1)
         )
@@ -213,8 +212,8 @@ class VAENCA(Model, nn.Module):
         state = states[-1]
 
         loc = state[:, :4, :, :].sg("b4hw").reshape((bs, ns, -1)).sg("Bnx")
-        logscale = state[:, 4:8, :, :].sg("b4hw").reshape((bs, ns, -1)).sg("Bnx")
-        # logscale = t.zeros_like(loc)
+        # logscale = state[:, 4:8, :, :].sg("b4hw").reshape((bs, ns, -1)).sg("Bnx")
+        logscale = t.zeros_like(loc)
         # logscale = self.log_sigma.unsqueeze(0).unsqueeze(2).unsqueeze(3).sg((1, 4, 1, 1)).expand_as(state[:, :4, :, :]).reshape((bs, ns, -1)).sg("Bnx")
 
         return DiscreteLogistic(loc, logscale, 0, 1, 1 / 256), states
