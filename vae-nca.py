@@ -58,14 +58,10 @@ class VAENCA(Model, nn.Module):
         class Residual(torch.nn.Module):
             def __init__(self, *args: t.nn.Module):
                 super().__init__()
-                self.modules = args
+                self.delegate = t.nn.Sequential(*args)
 
             def forward(self, inputs):
-                x = inputs
-                for module in self.modules:
-                    x = module(x)
-
-                return x + inputs
+                return self.delegate(inputs) + inputs
 
         update_net = t.nn.Sequential(
             t.nn.Conv2d(self.z_size, self.nca_hid, 3, padding=1),
