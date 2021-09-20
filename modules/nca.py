@@ -19,7 +19,7 @@ class MitosisNCA(t.nn.Module):
         state.sg("bc**")
         update = self.update_net(state)
         new_state = (state + update * rand_update_mask)
-        # new_state[:, (self.state_dim // 2):, :, :] = state[:, (self.state_dim // 2):, :, :]  # keep DNA part
+        new_state[:, (self.state_dim // 2):, :, :] = state[:, (self.state_dim // 2):, :, :]  # keep DNA part
         return new_state
 
     def forward(self, state):
