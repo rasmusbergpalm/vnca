@@ -17,8 +17,9 @@ class MitosisNCA(t.nn.Module):
         self.p_update = p_update
         self.rnn = t.nn.GRUCell(state_dim, state_dim)
 
-    def step(self, state, rand_update_mask):
+    def step(self, state: t.Tensor, rand_update_mask):
         state.sg("bc**")
+        state = state.view_as(state)
         b, c, h, w = state.shape
         update = self.update_net(state)
         rnn_in = rearrange(update, "b c h w -> (b h w) c")
