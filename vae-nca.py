@@ -33,7 +33,7 @@ class VAENCA(Model, nn.Module):
         self.train_samples = 1
         self.test_loss_fn = self.iwae_loss_fn
         self.test_samples = 1
-        self.nca_hid = 256
+        self.nca_hid = 512
         self.encoder_hid = 32
         batch_size = 32
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -52,55 +52,17 @@ class VAENCA(Model, nn.Module):
             nn.Linear(self.encoder_hid * (2 ** 4) * 4 * 4, 2 * self.z_size),
         )
 
-        # self.decoder = t.nn.Sequential(
-        #    t.nn.Conv2d(self.z_size, 8, kernel_size=1)
-        # )
-        class Residual(torch.nn.Module):
-            def __init__(self, *args: t.nn.Module):
-                super().__init__()
-                self.delegate = t.nn.Sequential(*args)
-
-            def forward(self, inputs):
-                return self.delegate(inputs) + inputs
-
         update_net = t.nn.Sequential(
             t.nn.Conv2d(self.z_size, self.nca_hid, 3, padding=1),
             t.nn.ELU(),
-            Residual(
-                t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
-                t.nn.ELU(),
-                t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
-            ),
-            Residual(
-                t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
-                t.nn.ELU(),
-                t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
-            ),
-            Residual(
-                t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
-                t.nn.ELU(),
-                t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
-            ),
-            Residual(
-                t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
-                t.nn.ELU(),
-                t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
-            ),
-            Residual(
-                t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
-                t.nn.ELU(),
-                t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
-            ),
-            Residual(
-                t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
-                t.nn.ELU(),
-                t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
-            ),
-            t.nn.Conv2d(self.nca_hid, self.z_size, 1),
-            t.nn.Tanh()
+            t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
+            t.nn.ELU(),
+            t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
+            t.nn.ELU(),
+            t.nn.Conv2d(self.nca_hid, self.z_size, 1)
         )
-        update_net[-2].weight.data.fill_(0.0)
-        update_net[-2].bias.data.fill_(0.0)
+        update_net[-1].weight.data.fill_(0.0)
+        update_net[-1].bias.data.fill_(0.0)
 
         self.nca = MitosisNCA(self.h, self.w, self.z_size, update_net, 5, 8, 1.0)
 
@@ -127,7 +89,7 @@ class VAENCA(Model, nn.Module):
             print(n, p.shape)
 
         self.to(self.device)
-        self.optimizer = optim.Adam(self.parameters(), lr=1e-3)
+        self.optimizer = optim.Adam(self.parameters(), lr=1e-4)
         self.batch_idx = 0
 
     def train_batch(self):
@@ -138,7 +100,7 @@ class VAENCA(Model, nn.Module):
         loss, z, p_x_given_z, recon_loss, kl_loss = self.forward(x, self.train_samples, self.train_loss_fn)
         loss.backward()
 
-        t.nn.utils.clip_grad_norm_(self.parameters(), 1.0)
+        t.nn.utils.clip_grad_norm_(self.parameters(), 10.0)
 
         self.optimizer.step()
 
@@ -297,7 +259,7 @@ class VAENCA(Model, nn.Module):
 
         reconstruction_loss = -logpx_given_z.mean()
         kl_loss = kld.mean()
-        loss = reconstruction_loss + kl_loss
+        loss = reconstruction_loss + 100*kl_loss
         return loss, reconstruction_loss, kl_loss  # (1,)
 
 
