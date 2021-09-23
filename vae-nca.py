@@ -16,6 +16,7 @@ from data.mnist import StaticMNIST
 from iterable_dataset_wrapper import IterableWrapper
 from modules.model import Model
 from modules.nca import MitosisNCA
+from modules.residual import Residual
 from train import train
 from util import get_writers
 
@@ -51,11 +52,26 @@ class VAENCA(Model, nn.Module):
 
         update_net = t.nn.Sequential(
             t.nn.Conv2d(self.z_size, self.nca_hid, 3, padding=1),
-            t.nn.ELU(),
-            t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
-            t.nn.ELU(),
-            t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
-            t.nn.ELU(),
+            Residual(
+                t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
+                t.nn.ELU(),
+                t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
+            ),
+            Residual(
+                t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
+                t.nn.ELU(),
+                t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
+            ),
+            Residual(
+                t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
+                t.nn.ELU(),
+                t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
+            ),
+            Residual(
+                t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
+                t.nn.ELU(),
+                t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
+            ),
             t.nn.Conv2d(self.nca_hid, self.z_size, 1)
         )
         update_net[-1].weight.data.fill_(0.0)
