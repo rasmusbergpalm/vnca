@@ -143,7 +143,7 @@ class VAENCA(Model, nn.Module):
         return samples, recons, growth
 
     def to_rgb(self, samples):
-        return Bernoulli(logits=samples[:, :1, :, :]).logits
+        return Bernoulli(logits=samples[:, :1, :, :]).probs
 
     def plot_growth_samples(self):
         ShapeGuard.reset()
