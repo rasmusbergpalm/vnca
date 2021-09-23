@@ -7,17 +7,15 @@ import torch.utils.data
 from PIL import Image
 from shapeguard import ShapeGuard
 from torch import nn, optim
-from torch.distributions import Normal, Distribution, kl_divergence
+from torch.distributions import Normal, Distribution, kl_divergence, Bernoulli
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 from torch.utils.tensorboard._utils import make_grid
-from torchvision import transforms, datasets
 
+from data.mnist import StaticMNIST
 from iterable_dataset_wrapper import IterableWrapper
-from logistic import DiscreteLogistic
 from modules.model import Model
 from modules.nca import MitosisNCA
-from noto import NotoEmoji
 from train import train
 from util import get_writers
 
@@ -27,7 +25,7 @@ from util import get_writers
 class VAENCA(Model, nn.Module):
     def __init__(self):
         super(Model, self).__init__()
-        self.h = self.w = 64
+        self.h = self.w = 32
         self.z_size = 256
         self.train_loss_fn = self.elbo_loss_function
         self.train_samples = 1
@@ -36,20 +34,19 @@ class VAENCA(Model, nn.Module):
         self.nca_hid = 512
         self.encoder_hid = 32
         batch_size = 32
+        self.bpd_dimensions = 1 * 28 * 28
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        self.dataset = "celeba"  # celeba
-        assert self.dataset in {'emoji', 'celeba'}
 
         filter_size = (5, 5)
         pad = tuple(s // 2 for s in filter_size)
         self.encoder = nn.Sequential(
-            nn.Conv2d(4, self.encoder_hid * 2 ** 0, filter_size, padding=pad), nn.ELU(),  # (bs, 32, 64, 64)
-            nn.Conv2d(self.encoder_hid * 2 ** 0, self.encoder_hid * 2 ** 1, filter_size, padding=pad, stride=2), nn.ELU(),  # (bs, 64, 32, 32)
-            nn.Conv2d(self.encoder_hid * 2 ** 1, self.encoder_hid * 2 ** 2, filter_size, padding=pad, stride=2), nn.ELU(),  # (bs, 128, 16, 16)
-            nn.Conv2d(self.encoder_hid * 2 ** 2, self.encoder_hid * 2 ** 3, filter_size, padding=pad, stride=2), nn.ELU(),  # (bs, 256, 8, 8)
-            nn.Conv2d(self.encoder_hid * 2 ** 3, self.encoder_hid * 2 ** 4, filter_size, padding=pad, stride=2), nn.ELU(),  # (bs, 512, 4, 4),
-            nn.Flatten(),  # (bs, 512*4*4)
-            nn.Linear(self.encoder_hid * (2 ** 4) * 4 * 4, 2 * self.z_size),
+            nn.Conv2d(1, self.encoder_hid * 2 ** 0, filter_size, padding=pad), nn.ELU(),  # (bs, 32, h, w)
+            nn.Conv2d(self.encoder_hid * 2 ** 0, self.encoder_hid * 2 ** 1, filter_size, padding=pad, stride=2), nn.ELU(),  # (bs, 64, h//2, w//2)
+            nn.Conv2d(self.encoder_hid * 2 ** 1, self.encoder_hid * 2 ** 2, filter_size, padding=pad, stride=2), nn.ELU(),  # (bs, 128, h//4, w//4)
+            nn.Conv2d(self.encoder_hid * 2 ** 2, self.encoder_hid * 2 ** 3, filter_size, padding=pad, stride=2), nn.ELU(),  # (bs, 256, h//8, w//8)
+            nn.Conv2d(self.encoder_hid * 2 ** 3, self.encoder_hid * 2 ** 4, filter_size, padding=pad, stride=2), nn.ELU(),  # (bs, 512, h//16, w//16),
+            nn.Flatten(),  # (bs, 512*h//16*w//16)
+            nn.Linear(self.encoder_hid * (2 ** 4) * self.h // 16 * self.w // 16, 2 * self.z_size),
         )
 
         update_net = t.nn.Sequential(
@@ -64,22 +61,11 @@ class VAENCA(Model, nn.Module):
         update_net[-1].weight.data.fill_(0.0)
         update_net[-1].bias.data.fill_(0.0)
 
-        self.nca = MitosisNCA(self.h, self.w, self.z_size, update_net, 5, 8, 1.0)
-
-        # self.log_sigma = t.nn.Parameter(-2 * t.ones((4,), device=self.device), requires_grad=True)
+        self.nca = MitosisNCA(self.h, self.w, self.z_size, update_net, int(np.log2(self.h)) - 1, 8, 1.0)
         self.p_z = Normal(t.zeros(self.z_size, device=self.device), t.ones(self.z_size, device=self.device))
 
         data_dir = os.environ.get('DATA_DIR') or "."
-
-        tp = transforms.Compose([transforms.Lambda(lambda img: img.convert("RGBA")), transforms.Resize((self.h, self.w)), transforms.ToTensor()])
-        if self.dataset == 'emoji':
-            train_data, val_data = NotoEmoji(data_dir, tp).train_val_split()
-            self.n_channels = 4
-        elif self.dataset == 'celeba':
-            train_data, val_data = datasets.CelebA(data_dir, split="train", download=True, transform=tp), datasets.CelebA(data_dir, split="valid", download=True, transform=tp)
-            self.n_channels = 3
-        else:
-            raise NotImplementedError()
+        train_data, val_data = StaticMNIST(data_dir, 'train'), StaticMNIST(data_dir, 'val'),
         self.train_loader = iter(DataLoader(IterableWrapper(train_data), batch_size=batch_size, pin_memory=True))
         self.test_loader = iter(DataLoader(IterableWrapper(val_data), batch_size=batch_size, pin_memory=True))
         self.train_writer, self.test_writer = get_writers("hierarchical-nca")
@@ -136,16 +122,14 @@ class VAENCA(Model, nn.Module):
         with torch.no_grad():
             samples = self.p_z.sample((64, 1)).to(self.device)
             decode, states = self.decode(samples)
-            samples = t.clip(decode.mean, 0, 1).reshape(64, 4, self.h, self.w).cpu().detach().numpy()
-            samples = self.to_rgb(samples)
+            samples = self.to_rgb(states[-1])
             # rgb=0.3, alpha=0 --> samples = 1-0+0.3*0 = 1 = white
             # rgb = 0.3, alpha=1 --> samples = 1-1+0.3*1 = 0.3
             # rgb = 0.3, alpha=0.5, samples = 1-0.5+0.3*0.5 = 0.5+0.15 = 0.65
 
             growth = []
             for state in states:
-                state = t.clip(state[0:1, :4, :, :], 0, 1)
-                rgb = self.to_rgb(state)
+                rgb = self.to_rgb(state[0:1])
                 h = state.shape[3]
                 pad = (self.h - h) // 2
                 rgb = t.nn.functional.pad(rgb, [pad] * 4, mode="constant", value=0)
@@ -154,15 +138,12 @@ class VAENCA(Model, nn.Module):
 
             x, y = next(self.test_loader)
             _, _, p_x_given_z, _, _ = self.forward(x[:64], 1, self.iwae_loss_fn)
-            recons = t.clip(p_x_given_z.mean, 0, 1).reshape(-1, 4, self.h, self.w).cpu().detach().numpy()
-            recons = self.to_rgb(recons)
+            recons = self.to_rgb(p_x_given_z.logits.reshape(-1, 1, self.h, self.w))
 
         return samples, recons, growth
 
     def to_rgb(self, samples):
-        rgb = samples[:, :3, :, :]
-        alpha = samples[:, 3:4, :, :]
-        return 1.0 - alpha + rgb * alpha
+        return Bernoulli(logits=samples[:, :1, :, :]).logits
 
     def plot_growth_samples(self):
         ShapeGuard.reset()
@@ -179,8 +160,8 @@ class VAENCA(Model, nn.Module):
 
     def report(self, writer: SummaryWriter, p_x_given_z, loss, recon_loss, kl_loss):
         writer.add_scalar('loss', loss.item(), self.batch_idx)
-        writer.add_scalar('bpd', loss.item() / (np.log(2) * self.h * self.w * self.n_channels), self.batch_idx)
-        writer.add_scalar('log_sigma', p_x_given_z.logscale.mean().item(), self.batch_idx)
+        writer.add_scalar('bpd', loss.item() / (np.log(2) * self.bpd_dimensions), self.batch_idx)
+        writer.add_scalar('entropy', p_x_given_z.entropy().mean().item(), self.batch_idx)
         if recon_loss:
             writer.add_scalar('recon_loss', recon_loss.item(), self.batch_idx)
         if kl_loss:
@@ -205,16 +186,11 @@ class VAENCA(Model, nn.Module):
         state = z.reshape((-1, self.z_size)).unsqueeze(2).unsqueeze(3).expand(-1, -1, 2, 2).sg("bz22")
         states = self.nca(state)
 
-        # states = [self.decoder(state) for state in states]
-
         state = states[-1]
 
-        loc = state[:, :4, :, :].sg("b4hw").reshape((bs, ns, -1)).sg("Bnx")
-        logscale = state[:, 4:8, :, :].sg("b4hw").reshape((bs, ns, -1)).sg("Bnx")
-        # logscale = t.zeros_like(loc)
-        # logscale = self.log_sigma.unsqueeze(0).unsqueeze(2).unsqueeze(3).sg((1, 4, 1, 1)).expand_as(state[:, :4, :, :]).reshape((bs, ns, -1)).sg("Bnx")
+        logits = state[:, :1, :, :].sg("b1hw").reshape((bs, ns, -1)).sg("Bnx")
 
-        return DiscreteLogistic(loc, logscale, 0, 1, 1 / 256), states
+        return Bernoulli(logits=logits), states
 
     def forward(self, x, n_samples, loss_fn):
         ShapeGuard.reset()
@@ -259,7 +235,7 @@ class VAENCA(Model, nn.Module):
 
         reconstruction_loss = -logpx_given_z.mean()
         kl_loss = kld.mean()
-        loss = reconstruction_loss + 10*kl_loss
+        loss = reconstruction_loss + kl_loss
         return loss, reconstruction_loss, kl_loss  # (1,)
 
 

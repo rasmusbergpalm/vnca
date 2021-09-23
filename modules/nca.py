@@ -1,5 +1,6 @@
 import torch as t
 import shapeguard
+from torch.utils.checkpoint import checkpoint
 
 
 class MitosisNCA(t.nn.Module):
@@ -28,7 +29,7 @@ class MitosisNCA(t.nn.Module):
 
         for j in range(self.steps_per_duplication):
             rand_update_mask = (t.rand((state.shape[0], 1, state.shape[2], state.shape[3]), device=self.device) < self.p_update).to(t.float32)
-            state = t.utils.checkpoint.checkpoint(self.step, state, rand_update_mask)
+            state = checkpoint(self.step, state, rand_update_mask)
             states.append(state)
 
         for i in range(self.n_duplications):
@@ -36,7 +37,7 @@ class MitosisNCA(t.nn.Module):
             states.append(state)
             for j in range(self.steps_per_duplication):
                 rand_update_mask = (t.rand((state.shape[0], 1, state.shape[2], state.shape[3]), device=self.device) < self.p_update).to(t.float32)
-                state = t.utils.checkpoint.checkpoint(self.step, state, rand_update_mask)
+                state = checkpoint(self.step, state, rand_update_mask)
                 states.append(state)
 
         return states
