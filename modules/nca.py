@@ -19,14 +19,6 @@ class MitosisNCA(t.nn.Module):
         self.p_update = p_update
         self.rnn = t.nn.GRUCell(state_dim, state_dim)
 
-        def init_gru(cell, gain=1):
-            cell.reset_parameters()
-            for _, hh, _, _ in cell.all_weights:
-                for i in range(0, hh.size(0), cell.hidden_size):
-                    orthogonal(hh[i:i + cell.hidden_size], gain=gain)
-
-        init_gru(self.rnn)
-
     def step(self, state: t.Tensor, rand_update_mask):
         state.sg("bc**")
         b, c, h, w = state.shape
