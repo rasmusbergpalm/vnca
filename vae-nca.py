@@ -59,10 +59,10 @@ class VAENCA(Model, nn.Module):
             t.nn.ELU(),
             t.nn.Conv2d(self.nca_hid, self.z_size, 1)
         )
-        # update_net[-1].weight.data.fill_(0.0)
-        # update_net[-1].bias.data.fill_(0.0)
+        update_net[-1].weight.data.fill_(0.0)
+        update_net[-1].bias.data.fill_(0.0)
 
-        self.decoder = t.nn.Conv2d(self.z_size, self.z_size, 1)
+        # self.decoder = t.nn.Conv2d(self.z_size, self.z_size, 1)
 
         self.nca = MitosisNCA(self.h, self.w, self.z_size, update_net, int(np.log2(self.h)) - 1, 8, 1.0)
         self.p_z = Normal(t.zeros(self.z_size, device=self.device), t.ones(self.z_size, device=self.device))
@@ -188,7 +188,7 @@ class VAENCA(Model, nn.Module):
         bs, ns, zs = z.shape
         state = z.reshape((-1, self.z_size)).unsqueeze(2).unsqueeze(3).expand(-1, -1, 2, 2).sg("bz22")
         states = self.nca(state)
-        states = [self.decoder(state) for state in states]
+        # states = [self.decoder(state) for state in states]
 
         state = states[-1]
 
