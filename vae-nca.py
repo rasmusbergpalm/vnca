@@ -27,7 +27,7 @@ class VAENCA(Model, nn.Module):
     def __init__(self):
         super(Model, self).__init__()
         self.h = self.w = 32
-        self.z_size = 256
+        self.z_size = 512
         self.train_loss_fn = self.elbo_loss_function
         self.train_samples = 1
         self.test_loss_fn = self.iwae_loss_fn
@@ -52,26 +52,11 @@ class VAENCA(Model, nn.Module):
 
         update_net = t.nn.Sequential(
             t.nn.Conv2d(self.z_size, self.nca_hid, 3, padding=1),
-            Residual(
-                t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
-                t.nn.ELU(),
-                t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
-            ),
-            Residual(
-                t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
-                t.nn.ELU(),
-                t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
-            ),
-            Residual(
-                t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
-                t.nn.ELU(),
-                t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
-            ),
-            Residual(
-                t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
-                t.nn.ELU(),
-                t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
-            ),
+            t.nn.ELU(),
+            t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
+            t.nn.ELU(),
+            t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
+            t.nn.ELU(),
             t.nn.Conv2d(self.nca_hid, self.z_size, 1)
         )
         update_net[-1].weight.data.fill_(0.0)
