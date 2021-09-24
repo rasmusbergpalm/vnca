@@ -1,5 +1,6 @@
 import torch as t
 import shapeguard
+from einops import rearrange
 from torch.utils.checkpoint import checkpoint
 
 
@@ -15,11 +16,17 @@ class MitosisNCA(t.nn.Module):
         self.device = "cuda" if t.cuda.is_available() else "cpu"
         self.update_net = update_net
         self.p_update = p_update
+        self.rnn = t.nn.GRUCell(state_dim, state_dim)
 
     def step(self, state, rand_update_mask):
         state.sg("bc**")
+        b, c, h, w = state.shape
         update = self.update_net(state)
-        new_state = (state + update * rand_update_mask)
+        rnn_in = rearrange(update, "b c h w -> (b h w) c")
+        rnn_hid = rearrange(state, "b c h w -> (b h w) c")
+        rnn_out = self.rnn.forward(rnn_in, rnn_hid)
+        new_state = rearrange(rnn_out, "(b h w) c -> b c h w", b=b, c=c, h=h, w=w)
+        # new_state = (state + update * rand_update_mask)
         # new_state[:, (self.state_dim // 2):, :, :] = state[:, (self.state_dim // 2):, :, :]  # keep DNA part
         return new_state
 
