@@ -15,7 +15,6 @@ class MitosisNCA(t.nn.Module):
         self.device = "cuda" if t.cuda.is_available() else "cpu"
         self.update_net = update_net
         self.p_update = p_update
-        self.mit_vec = t.nn.Parameter(t.zeros((1, state_dim, 1, 1), requires_grad=True))
 
     def step(self, state, rand_update_mask):
         state.sg("bc**")
@@ -35,7 +34,6 @@ class MitosisNCA(t.nn.Module):
 
         for i in range(self.n_duplications):
             state = t.repeat_interleave(t.repeat_interleave(state, 2, dim=2), 2, dim=3)  # cell division
-            state += self.mit_vec
             states.append(state)
             for j in range(self.steps_per_duplication):
                 rand_update_mask = (t.rand((state.shape[0], 1, state.shape[2], state.shape[3]), device=self.device) < self.p_update).to(t.float32)

@@ -8,9 +8,10 @@ from PIL import Image
 from shapeguard import ShapeGuard
 from torch import nn, optim
 from torch.distributions import Normal, Distribution, kl_divergence, Bernoulli
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, ConcatDataset
 from torch.utils.tensorboard import SummaryWriter
 from torch.utils.tensorboard._utils import make_grid
+import tqdm
 
 from data.mnist import StaticMNIST
 from iterable_dataset_wrapper import IterableWrapper
@@ -52,25 +53,40 @@ class VAENCA(Model, nn.Module):
 
         update_net = t.nn.Sequential(
             t.nn.Conv2d(self.z_size, self.nca_hid, 3, padding=1),
-            t.nn.ELU(),
-            t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
-            t.nn.ELU(),
-            t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
-            t.nn.ELU(),
+            Residual(
+                t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
+                t.nn.ELU(),
+                t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
+            ),
+            Residual(
+                t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
+                t.nn.ELU(),
+                t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
+            ),
+            Residual(
+                t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
+                t.nn.ELU(),
+                t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
+            ),
+            Residual(
+                t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
+                t.nn.ELU(),
+                t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
+            ),
             t.nn.Conv2d(self.nca_hid, self.z_size, 1)
         )
         update_net[-1].weight.data.fill_(0.0)
         update_net[-1].bias.data.fill_(0.0)
-
-        # self.decoder = t.nn.Conv2d(self.z_size, self.z_size, 1)
 
         self.nca = MitosisNCA(self.h, self.w, self.z_size, update_net, int(np.log2(self.h)) - 1, 8, 1.0)
         self.p_z = Normal(t.zeros(self.z_size, device=self.device), t.ones(self.z_size, device=self.device))
 
         data_dir = os.environ.get('DATA_DIR') or "."
         train_data, val_data = StaticMNIST(data_dir, 'train'), StaticMNIST(data_dir, 'val'),
+        train_data = ConcatDataset((train_data, val_data))
+        self.test_set = StaticMNIST(data_dir, 'test')
         self.train_loader = iter(DataLoader(IterableWrapper(train_data), batch_size=batch_size, pin_memory=True))
-        self.test_loader = iter(DataLoader(IterableWrapper(val_data), batch_size=batch_size, pin_memory=True))
+        self.test_loader = iter(DataLoader(IterableWrapper(self.test_set), batch_size=batch_size, pin_memory=True))
         self.train_writer, self.test_writer = get_writers("hierarchical-nca")
 
         print(self)
@@ -119,6 +135,16 @@ class VAENCA(Model, nn.Module):
             loss, z, p_x_given_z, recon_loss, kl_loss = self.forward(x, self.test_samples, self.test_loss_fn)
             self.report(self.test_writer, p_x_given_z, loss, recon_loss, kl_loss)
         return loss.item()
+
+    def test(self, n_iw_samples):
+        self.train(False)
+        with t.no_grad():
+            total_loss = 0.0
+            for x, y in tqdm.tqdm(self.test_set.samples):
+                loss, z, p_x_given_z, recon_loss, kl_loss = self.forward(x, n_iw_samples, self.test_loss_fn)
+                total_loss += loss
+
+        print(total_loss / len(self.test_set))
 
     def _plot_samples(self):
         ShapeGuard.reset()
@@ -188,7 +214,6 @@ class VAENCA(Model, nn.Module):
         bs, ns, zs = z.shape
         state = z.reshape((-1, self.z_size)).unsqueeze(2).unsqueeze(3).expand(-1, -1, 2, 2).sg("bz22")
         states = self.nca(state)
-        # states = [self.decoder(state) for state in states]
 
         state = states[-1]
 
@@ -247,3 +272,4 @@ if __name__ == "__main__":
     model = VAENCA()
     model.eval_batch()
     train(model, n_updates=100_000, eval_interval=100)
+    model.test(128)
