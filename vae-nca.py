@@ -35,7 +35,7 @@ class VAENCA(Model, nn.Module):
         self.train_samples = 1
         self.test_loss_fn = self.iwae_loss_fn
         self.test_samples = 1
-        self.nca_hid = 512
+        self.nca_hid = 256
         self.encoder_hid = 32
         self.n_mixtures = 1
         batch_size = 32
@@ -174,7 +174,7 @@ class VAENCA(Model, nn.Module):
         return samples, recons, growth
 
     def to_rgb(self, state):
-        return DiscretizedMixtureLogitsDistribution(self.n_mixtures, state[:, :self.n_mixtures * 10, :, :]).sample()
+        return (DiscretizedMixtureLogitsDistribution(self.n_mixtures, state[:, :self.n_mixtures * 10, :, :]).sample() + 1) / 2
 
     def plot_growth_samples(self):
         ShapeGuard.reset()

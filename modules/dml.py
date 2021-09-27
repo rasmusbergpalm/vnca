@@ -256,3 +256,4 @@ if __name__ == '__main__':
     logits = t.randn((b, 10, h, w))
     dist = DiscretizedMixtureLogitsDistribution(1, logits)
     print(dist.log_prob(x).shape)
+    print(dist.sample())
