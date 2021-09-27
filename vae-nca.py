@@ -15,8 +15,10 @@ from torchvision import transforms, datasets
 
 from iterable_dataset_wrapper import IterableWrapper
 from logistic import DiscreteLogistic
+from modules.dml import DiscretizedMixtureLogitsDistribution
 from modules.model import Model
 from modules.nca import MitosisNCA
+from modules.residual import Residual
 from noto import NotoEmoji
 from train import train
 from util import get_writers
@@ -35,15 +37,17 @@ class VAENCA(Model, nn.Module):
         self.test_samples = 1
         self.nca_hid = 512
         self.encoder_hid = 32
+        self.n_mixtures = 1
         batch_size = 32
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.dataset = "celeba"  # celeba
         assert self.dataset in {'emoji', 'celeba'}
+        self.n_channels = 3
 
         filter_size = (5, 5)
         pad = tuple(s // 2 for s in filter_size)
         self.encoder = nn.Sequential(
-            nn.Conv2d(4, self.encoder_hid * 2 ** 0, filter_size, padding=pad), nn.ELU(),  # (bs, 32, 64, 64)
+            nn.Conv2d(self.n_channels, self.encoder_hid * 2 ** 0, filter_size, padding=pad), nn.ELU(),  # (bs, 32, 64, 64)
             nn.Conv2d(self.encoder_hid * 2 ** 0, self.encoder_hid * 2 ** 1, filter_size, padding=pad, stride=2), nn.ELU(),  # (bs, 64, 32, 32)
             nn.Conv2d(self.encoder_hid * 2 ** 1, self.encoder_hid * 2 ** 2, filter_size, padding=pad, stride=2), nn.ELU(),  # (bs, 128, 16, 16)
             nn.Conv2d(self.encoder_hid * 2 ** 2, self.encoder_hid * 2 ** 3, filter_size, padding=pad, stride=2), nn.ELU(),  # (bs, 256, 8, 8)
@@ -54,11 +58,26 @@ class VAENCA(Model, nn.Module):
 
         update_net = t.nn.Sequential(
             t.nn.Conv2d(self.z_size, self.nca_hid, 3, padding=1),
-            t.nn.ELU(),
-            t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
-            t.nn.ELU(),
-            t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
-            t.nn.ELU(),
+            Residual(
+                t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
+                t.nn.ELU(),
+                t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
+            ),
+            Residual(
+                t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
+                t.nn.ELU(),
+                t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
+            ),
+            Residual(
+                t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
+                t.nn.ELU(),
+                t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
+            ),
+            Residual(
+                t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
+                t.nn.ELU(),
+                t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
+            ),
             t.nn.Conv2d(self.nca_hid, self.z_size, 1)
         )
         update_net[-1].weight.data.fill_(0.0)
@@ -71,13 +90,11 @@ class VAENCA(Model, nn.Module):
 
         data_dir = os.environ.get('DATA_DIR') or "."
 
-        tp = transforms.Compose([transforms.Lambda(lambda img: img.convert("RGBA")), transforms.Resize((self.h, self.w)), transforms.ToTensor()])
+        tp = transforms.Compose([transforms.Lambda(lambda img: img.convert("RGB")), transforms.Resize((self.h, self.w)), transforms.ToTensor()])
         if self.dataset == 'emoji':
             train_data, val_data = NotoEmoji(data_dir, tp).train_val_split()
-            self.n_channels = 4
         elif self.dataset == 'celeba':
             train_data, val_data = datasets.CelebA(data_dir, split="train", download=True, transform=tp), datasets.CelebA(data_dir, split="valid", download=True, transform=tp)
-            self.n_channels = 3
         else:
             raise NotImplementedError()
         self.train_loader = iter(DataLoader(IterableWrapper(train_data), batch_size=batch_size, pin_memory=True))
@@ -136,16 +153,14 @@ class VAENCA(Model, nn.Module):
         with torch.no_grad():
             samples = self.p_z.sample((64, 1)).to(self.device)
             decode, states = self.decode(samples)
-            samples = t.clip(decode.mean, 0, 1).reshape(64, 4, self.h, self.w).cpu().detach().numpy()
-            samples = self.to_rgb(samples)
+            samples = self.to_rgb(states[-1])
             # rgb=0.3, alpha=0 --> samples = 1-0+0.3*0 = 1 = white
             # rgb = 0.3, alpha=1 --> samples = 1-1+0.3*1 = 0.3
             # rgb = 0.3, alpha=0.5, samples = 1-0.5+0.3*0.5 = 0.5+0.15 = 0.65
 
             growth = []
             for state in states:
-                state = t.clip(state[0:1, :4, :, :], 0, 1)
-                rgb = self.to_rgb(state)
+                rgb = self.to_rgb(state[0:1])
                 h = state.shape[3]
                 pad = (self.h - h) // 2
                 rgb = t.nn.functional.pad(rgb, [pad] * 4, mode="constant", value=0)
@@ -154,15 +169,12 @@ class VAENCA(Model, nn.Module):
 
             x, y = next(self.test_loader)
             _, _, p_x_given_z, _, _ = self.forward(x[:64], 1, self.iwae_loss_fn)
-            recons = t.clip(p_x_given_z.mean, 0, 1).reshape(-1, 4, self.h, self.w).cpu().detach().numpy()
-            recons = self.to_rgb(recons)
+            recons = self.to_rgb(p_x_given_z.logits)
 
         return samples, recons, growth
 
-    def to_rgb(self, samples):
-        rgb = samples[:, :3, :, :]
-        alpha = samples[:, 3:4, :, :]
-        return 1.0 - alpha + rgb * alpha
+    def to_rgb(self, state):
+        return DiscretizedMixtureLogitsDistribution(self.n_mixtures, state[:, :self.n_mixtures * 10, :, :]).sample()
 
     def plot_growth_samples(self):
         ShapeGuard.reset()
@@ -180,7 +192,7 @@ class VAENCA(Model, nn.Module):
     def report(self, writer: SummaryWriter, p_x_given_z, loss, recon_loss, kl_loss):
         writer.add_scalar('loss', loss.item(), self.batch_idx)
         writer.add_scalar('bpd', loss.item() / (np.log(2) * self.h * self.w * self.n_channels), self.batch_idx)
-        writer.add_scalar('log_sigma', p_x_given_z.logscale.mean().item(), self.batch_idx)
+        # writer.add_scalar('log_sigma', p_x_given_z.logscale.mean().item(), self.batch_idx)
         if recon_loss:
             writer.add_scalar('recon_loss', recon_loss.item(), self.batch_idx)
         if kl_loss:
@@ -209,36 +221,39 @@ class VAENCA(Model, nn.Module):
 
         state = states[-1]
 
-        loc = state[:, :4, :, :].sg("b4hw").reshape((bs, ns, -1)).sg("Bnx")
-        logscale = state[:, 4:8, :, :].sg("b4hw").reshape((bs, ns, -1)).sg("Bnx")
+        logits = state[:, :self.n_mixtures * 10, :, :]
         # logscale = t.zeros_like(loc)
         # logscale = self.log_sigma.unsqueeze(0).unsqueeze(2).unsqueeze(3).sg((1, 4, 1, 1)).expand_as(state[:, :4, :, :]).reshape((bs, ns, -1)).sg("Bnx")
 
-        return DiscreteLogistic(loc, logscale, 0, 1, 1 / 256), states
+        return DiscretizedMixtureLogitsDistribution(self.n_mixtures, logits), states
 
     def forward(self, x, n_samples, loss_fn):
         ShapeGuard.reset()
-        x.sg("B4hw")
-        x = x.to(self.device)
-        x_flat = x.reshape(x.shape[0], -1).sg("Bx")
+        x.sg(("B", 3, "h", "w"))
+        x = (x.to(self.device) * 2) - 1
         q_z_given_x = self.encode(x).sg("Bz")
         z = q_z_given_x.rsample((n_samples,)).permute((1, 0, 2)).sg("Bnz")
         decode, _ = self.decode(z)
-        p_x_given_z = decode.sg("Bnx")
+        p_x_given_z = decode.sg("b*hw")
 
-        loss, recon_loss, kl_loss = loss_fn(x_flat, p_x_given_z, q_z_given_x, z)
+        loss, recon_loss, kl_loss = loss_fn(x, p_x_given_z, q_z_given_x, z)
         return loss, z, p_x_given_z, recon_loss, kl_loss
 
     def iwae_loss_fn(self, x: t.Tensor, p_x_given_z: Distribution, q_z_given_x: Distribution, z: t.Tensor):
         """
           log(p(x)) >= logsumexp_{i=1}^N[ log(p(x|z_i)) + log(p(z_i)) - log(q(z_i|x))] - log(N)
         """
-        x.sg("Bx")
-        p_x_given_z.sg("Bnx")
+        x.sg(("B", 3, "h", "w"))
+        p_x_given_z.sg(("b", self.n_mixtures * 10, "h", "w"))
         q_z_given_x.sg("Bz")
         z.sg("Bnz")
+        B, n, zs = z.shape
 
-        logpx_given_z = p_x_given_z.log_prob(x.unsqueeze(1).expand_as(p_x_given_z.mean)).sum(dim=2).sg("Bn")
+        x = (x.unsqueeze(1)
+             .expand((-1, n, -1, -1, -1))
+             .reshape(-1, 3, self.h, self.w)
+             ).sg(("b", 3, self.h, self.w))
+        logpx_given_z = p_x_given_z.log_prob(x).sum(dim=(1, 2)).sg("b").reshape((B, n))
         logpz = self.p_z.log_prob(z).sum(dim=2).sg("Bn")
         logqz_given_x = q_z_given_x.log_prob(z.permute((1, 0, 2))).sum(dim=2).permute((1, 0)).sg("Bn")
         logpx = (t.logsumexp(logpx_given_z + logpz - logqz_given_x, dim=1) - t.log(t.scalar_tensor(z.shape[1]))).sg("B")
@@ -249,17 +264,22 @@ class VAENCA(Model, nn.Module):
           log p(x) >= E_q(z|x) [ log p(x|z) p(z) / q(z|x) ]
           Reconstruction + KL divergence losses summed over all elements and batch
         """
-        x.sg("Bx")
-        p_x_given_z.sg("Bnx")
+        x.sg(("B", 3, "h", "w"))
+        p_x_given_z.sg(("b", self.n_mixtures * 10, "h", "w"))
         q_z_given_x.sg("Bz")
         z.sg("Bnz")
+        B, n, zs = z.shape
 
-        logpx_given_z = p_x_given_z.log_prob(x.unsqueeze(1).expand_as(p_x_given_z.mean)).sum(dim=2).mean(dim=1).sg("B")
+        x = (x.unsqueeze(1)
+             .expand((-1, n, -1, -1, -1))
+             .reshape(-1, 3, self.h, self.w)
+             ).sg(("b", 3, self.h, self.w))
+        logpx_given_z = p_x_given_z.log_prob(x).sum(dim=(1, 2)).sg("b").reshape((B, n)).mean(dim=1).sg("B")
         kld = kl_divergence(q_z_given_x, self.p_z).sum(dim=1).sg("B")
 
         reconstruction_loss = -logpx_given_z.mean()
         kl_loss = kld.mean()
-        loss = reconstruction_loss + 10*kl_loss
+        loss = reconstruction_loss + kl_loss
         return loss, reconstruction_loss, kl_loss  # (1,)
 
 
