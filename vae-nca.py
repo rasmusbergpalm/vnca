@@ -23,6 +23,7 @@ from noto import NotoEmoji
 from train import train
 from util import get_writers
 
+
 # torch.autograd.set_detect_anomaly(True)
 
 class VAENCA(Model, nn.Module):
@@ -101,8 +102,10 @@ class VAENCA(Model, nn.Module):
         self.train_writer, self.test_writer = get_writers("hierarchical-nca")
 
         print(self)
+        total = sum(p.numel() for p in self.parameters())
         for n, p in self.named_parameters():
-            print(n, p.shape)
+            print(n, p.shape, p.numel(), "%.1f" % (p.numel() / total * 100))
+        print("Total: %d" % total)
 
         self.to(self.device)
         self.optimizer = optim.Adam(self.parameters(), lr=1e-4)
