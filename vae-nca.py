@@ -33,7 +33,7 @@ class VAENCA(Model, nn.Module):
         self.train_samples = 1
         self.test_loss_fn = self.iwae_loss_fn
         self.test_samples = 1
-        self.nca_hid = 512
+        self.nca_hid = 256
         self.encoder_hid = 32
         batch_size = 32
         self.bpd_dimensions = 1 * 28 * 28
@@ -172,7 +172,7 @@ class VAENCA(Model, nn.Module):
         return samples, recons, growth
 
     def to_rgb(self, samples):
-        return Bernoulli(logits=samples[:, :1, :, :]).probs
+        return Bernoulli(logits=samples[:, :1, :, :]).sample()
 
     def plot_growth_samples(self):
         ShapeGuard.reset()
