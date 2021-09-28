@@ -119,7 +119,7 @@ class VAENCA(Model, nn.Module):
         loss, z, p_x_given_z, recon_loss, kl_loss = self.forward(x, self.train_samples, self.train_loss_fn)
         loss.backward()
 
-        t.nn.utils.clip_grad_norm_(self.parameters(), 10.0)
+        t.nn.utils.clip_grad_norm_(self.parameters(), 1.0)
 
         self.optimizer.step()
 
@@ -282,7 +282,7 @@ class VAENCA(Model, nn.Module):
         reconstruction_loss = -logpx_given_z.mean()
         kl_loss = kld.mean()
 
-        loss = reconstruction_loss + 10*kl_loss
+        loss = reconstruction_loss + 100*kl_loss
         return loss, reconstruction_loss, kl_loss  # (1,)
 
 
