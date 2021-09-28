@@ -38,7 +38,7 @@ class VAENCA(Model, nn.Module):
         self.nca_hid = 256
         self.encoder_hid = 32
         self.n_mixtures = 4
-        batch_size = 128
+        batch_size = 32
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.dataset = "celeba"  # celeba
         assert self.dataset in {'emoji', 'celeba'}
