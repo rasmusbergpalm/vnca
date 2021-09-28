@@ -23,8 +23,8 @@ from noto import NotoEmoji
 from train import train
 from util import get_writers
 
-t.Tensor.sg = lambda x: x
-t.distributions.Distribution.sg = lambda x: x
+t.Tensor.sg = lambda x, s: x
+t.distributions.Distribution.sg = lambda x, s: x
 
 
 # torch.autograd.set_detect_anomaly(True)
