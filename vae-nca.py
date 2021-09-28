@@ -281,7 +281,7 @@ class VAENCA(Model, nn.Module):
 
         reconstruction_loss = -logpx_given_z.mean()
         kl_loss = kld.mean()
-        loss = reconstruction_loss + kl_loss
+        loss = reconstruction_loss + 100 * kl_loss
         return loss, reconstruction_loss, kl_loss  # (1,)
 
 
