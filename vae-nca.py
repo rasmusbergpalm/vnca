@@ -37,7 +37,7 @@ class VAENCA(Model, nn.Module):
         self.test_samples = 1
         self.nca_hid = 256
         self.encoder_hid = 32
-        self.n_mixtures = 1
+        self.n_mixtures = 4
         batch_size = 32
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.dataset = "celeba"  # celeba
