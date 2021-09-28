@@ -59,26 +59,26 @@ class VAENCA(Model, nn.Module):
         update_net = t.nn.Sequential(
             t.nn.Conv2d(self.z_size, self.nca_hid, 3, padding=1),
             Residual(
-                t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
+                t.nn.Conv2d(self.nca_hid, self.nca_hid, 3, padding=1),
                 t.nn.ELU(),
-                t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
+                t.nn.Conv2d(self.nca_hid, self.nca_hid, 3, padding=1),
             ),
             Residual(
-                t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
+                t.nn.Conv2d(self.nca_hid, self.nca_hid, 3, padding=1),
                 t.nn.ELU(),
-                t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
+                t.nn.Conv2d(self.nca_hid, self.nca_hid, 3, padding=1),
             ),
             Residual(
-                t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
+                t.nn.Conv2d(self.nca_hid, self.nca_hid, 3, padding=1),
                 t.nn.ELU(),
-                t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
+                t.nn.Conv2d(self.nca_hid, self.nca_hid, 3, padding=1),
             ),
             Residual(
-                t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
+                t.nn.Conv2d(self.nca_hid, self.nca_hid, 3, padding=1),
                 t.nn.ELU(),
-                t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
+                t.nn.Conv2d(self.nca_hid, self.nca_hid, 3, padding=1),
             ),
-            t.nn.Conv2d(self.nca_hid, self.z_size, 1)
+            t.nn.Conv2d(self.nca_hid, self.z_size, 3, padding=1)
         )
         update_net[-1].weight.data.fill_(0.0)
         update_net[-1].bias.data.fill_(0.0)
@@ -209,8 +209,8 @@ class VAENCA(Model, nn.Module):
     def encode(self, x) -> Distribution:  # q(z|x)
         x.sg("*4hw")
         q = self.encoder(x).sg("*Z")
-        loc = t.clip(q[:, :self.z_size].sg("*z"), -100.0, 100.0)
-        logsigma = t.clip(q[:, self.z_size:].sg("*z"), -7.0, 7.0)
+        loc = q[:, :self.z_size].sg("*z")
+        logsigma = q[:, self.z_size:].sg("*z")
         return Normal(loc=loc, scale=t.exp(logsigma))
 
     def decode(self, z: t.Tensor) -> Tuple[Distribution, Sequence[t.Tensor]]:  # p(x|z)
@@ -282,7 +282,7 @@ class VAENCA(Model, nn.Module):
         reconstruction_loss = -logpx_given_z.mean()
         kl_loss = kld.mean()
 
-        loss = reconstruction_loss + 10*kl_loss
+        loss = reconstruction_loss + kl_loss
         return loss, reconstruction_loss, kl_loss  # (1,)
 
 
