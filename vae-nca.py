@@ -209,8 +209,8 @@ class VAENCA(Model, nn.Module):
     def encode(self, x) -> Distribution:  # q(z|x)
         x.sg("*4hw")
         q = self.encoder(x).sg("*Z")
-        loc = q[:, :self.z_size].sg("*z")
-        logsigma = q[:, self.z_size:].sg("*z")
+        loc = t.clip(q[:, :self.z_size].sg("*z"), -100.0, 100.0)
+        logsigma = t.clip(q[:, self.z_size:].sg("*z"), -7.0, 7.0)
         return Normal(loc=loc, scale=t.exp(logsigma))
 
     def decode(self, z: t.Tensor) -> Tuple[Distribution, Sequence[t.Tensor]]:  # p(x|z)
