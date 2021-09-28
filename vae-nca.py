@@ -23,10 +23,6 @@ from noto import NotoEmoji
 from train import train
 from util import get_writers
 
-t.Tensor.sg = lambda x, s: x
-t.distributions.Distribution.sg = lambda x, s: x
-
-
 # torch.autograd.set_detect_anomaly(True)
 
 class VAENCA(Model, nn.Module):
@@ -208,16 +204,16 @@ class VAENCA(Model, nn.Module):
         writer.add_images("growth", growth, self.batch_idx)
 
     def encode(self, x) -> Distribution:  # q(z|x)
-        x.sg("B4hw")
-        q = self.encoder(x).sg("BZ")
-        loc = q[:, :self.z_size].sg("Bz")
-        logsigma = q[:, self.z_size:].sg("Bz")
+        x.sg("*4hw")
+        q = self.encoder(x).sg("*Z")
+        loc = q[:, :self.z_size].sg("*z")
+        logsigma = q[:, self.z_size:].sg("*z")
         return Normal(loc=loc, scale=t.exp(logsigma))
 
     def decode(self, z: t.Tensor) -> Tuple[Distribution, Sequence[t.Tensor]]:  # p(x|z)
-        z.sg("Bnz")
+        z.sg("*nz")
         bs, ns, zs = z.shape
-        state = z.reshape((-1, self.z_size)).unsqueeze(2).unsqueeze(3).expand(-1, -1, 2, 2).sg("bz22")
+        state = z.reshape((-1, self.z_size)).unsqueeze(2).unsqueeze(3).expand(-1, -1, 2, 2).sg("*z22")
         states = self.nca(state)
 
         # states = [self.decoder(state) for state in states]
@@ -226,7 +222,7 @@ class VAENCA(Model, nn.Module):
 
         logits = state[:, :self.n_mixtures * 10, :, :]
         # logscale = t.zeros_like(loc)
-        # logscale = self.log_sigma.unsqueeze(0).unsqueeze(2).unsqueeze(3).sg((1, 4, 1, 1)).expand_as(state[:, :4, :, :]).reshape((bs, ns, -1)).sg("Bnx")
+        # logscale = self.log_sigma.unsqueeze(0).unsqueeze(2).unsqueeze(3).sg((1, 4, 1, 1)).expand_as(state[:, :4, :, :]).reshape((bs, ns, -1)).sg("*nx")
 
         return DiscretizedMixtureLogitsDistribution(self.n_mixtures, logits), states
 
@@ -234,10 +230,10 @@ class VAENCA(Model, nn.Module):
         ShapeGuard.reset()
         x.sg(("B", 3, "h", "w"))
         x = (x.to(self.device) * 2) - 1
-        q_z_given_x = self.encode(x).sg("Bz")
-        z = q_z_given_x.rsample((n_samples,)).permute((1, 0, 2)).sg("Bnz")
+        q_z_given_x = self.encode(x).sg("*z")
+        z = q_z_given_x.rsample((n_samples,)).permute((1, 0, 2)).sg("*nz")
         decode, _ = self.decode(z)
-        p_x_given_z = decode.sg("b*hw")
+        p_x_given_z = decode.sg("**hw")
 
         loss, recon_loss, kl_loss = loss_fn(x, p_x_given_z, q_z_given_x, z)
         return loss, z, p_x_given_z, recon_loss, kl_loss
@@ -248,18 +244,18 @@ class VAENCA(Model, nn.Module):
         """
         x.sg(("B", 3, "h", "w"))
         p_x_given_z.sg(("b", self.n_mixtures * 10, "h", "w"))
-        q_z_given_x.sg("Bz")
-        z.sg("Bnz")
+        q_z_given_x.sg("*z")
+        z.sg("*nz")
         B, n, zs = z.shape
 
         x = (x.unsqueeze(1)
              .expand((-1, n, -1, -1, -1))
              .reshape(-1, 3, self.h, self.w)
              ).sg(("b", 3, self.h, self.w))
-        logpx_given_z = p_x_given_z.log_prob(x).sum(dim=(1, 2)).sg("b").reshape((B, n))
-        logpz = self.p_z.log_prob(z).sum(dim=2).sg("Bn")
-        logqz_given_x = q_z_given_x.log_prob(z.permute((1, 0, 2))).sum(dim=2).permute((1, 0)).sg("Bn")
-        logpx = (t.logsumexp(logpx_given_z + logpz - logqz_given_x, dim=1) - t.log(t.scalar_tensor(z.shape[1]))).sg("B")
+        logpx_given_z = p_x_given_z.log_prob(x).sum(dim=(1, 2)).sg("*").reshape((B, n))
+        logpz = self.p_z.log_prob(z).sum(dim=2).sg("*n")
+        logqz_given_x = q_z_given_x.log_prob(z.permute((1, 0, 2))).sum(dim=2).permute((1, 0)).sg("*n")
+        logpx = (t.logsumexp(logpx_given_z + logpz - logqz_given_x, dim=1) - t.log(t.scalar_tensor(z.shape[1]))).sg("*")
         return -logpx.mean(), None, None  # (1,)
 
     def elbo_loss_function(self, x: t.Tensor, p_x_given_z: Distribution, q_z_given_x: Distribution, z: t.Tensor):
@@ -269,16 +265,16 @@ class VAENCA(Model, nn.Module):
         """
         x.sg(("B", 3, "h", "w"))
         p_x_given_z.sg(("b", self.n_mixtures * 10, "h", "w"))
-        q_z_given_x.sg("Bz")
-        z.sg("Bnz")
+        q_z_given_x.sg("*z")
+        z.sg("*nz")
         B, n, zs = z.shape
 
         x = (x.unsqueeze(1)
              .expand((-1, n, -1, -1, -1))
              .reshape(-1, 3, self.h, self.w)
              ).sg(("b", 3, self.h, self.w))
-        logpx_given_z = p_x_given_z.log_prob(x).sum(dim=(1, 2)).sg("b").reshape((B, n)).mean(dim=1).sg("B")
-        kld = kl_divergence(q_z_given_x, self.p_z).sum(dim=1).sg("B")
+        logpx_given_z = p_x_given_z.log_prob(x).sum(dim=(1, 2)).sg("*").reshape((B, n)).mean(dim=1).sg("*")
+        kld = kl_divergence(q_z_given_x, self.p_z).sum(dim=1).sg("*")
 
         reconstruction_loss = -logpx_given_z.mean()
         kl_loss = kld.mean()

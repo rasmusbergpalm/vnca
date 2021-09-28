@@ -16,14 +16,14 @@ class MitosisNCA(t.nn.Module):
         self.p_update = p_update
 
     def step(self, state, rand_update_mask):
-        state.sg("bc**")
+        state.sg("*c**")
         update = self.update_net(state)
         new_state = (state + update * rand_update_mask)
         # new_state[:, (self.state_dim // 2):, :, :] = state[:, (self.state_dim // 2):, :, :]  # keep DNA part
         return new_state
 
     def forward(self, state):
-        state.sg("bc22")
+        state.sg("*c22")
         states = [state]
 
         for j in range(self.steps_per_duplication):
