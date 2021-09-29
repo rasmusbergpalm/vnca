@@ -37,7 +37,7 @@ class VAENCA(Model, nn.Module):
         self.test_samples = 1
         self.nca_hid = 256
         self.encoder_hid = 32
-        self.n_mixtures = 4
+        self.n_mixtures = 1
         batch_size = 32
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.dataset = "celeba"  # celeba
@@ -108,7 +108,7 @@ class VAENCA(Model, nn.Module):
         print("Total: %d" % total)
 
         self.to(self.device)
-        self.optimizer = optim.Adam(self.parameters(), lr=1e-4)
+        self.optimizer = optim.Adam(self.parameters(), lr=1e-3)
         self.batch_idx = 0
 
     def train_batch(self):
@@ -209,8 +209,8 @@ class VAENCA(Model, nn.Module):
     def encode(self, x) -> Distribution:  # q(z|x)
         x.sg("*4hw")
         q = self.encoder(x).sg("*Z")
-        loc = t.clip(q[:, :self.z_size].sg("*z"), -100.0, 100.0)
-        logsigma = t.clip(q[:, self.z_size:].sg("*z"), -7.0, 7.0)
+        loc = q[:, :self.z_size].sg("*z")
+        logsigma = q[:, self.z_size:].sg("*z")
         return Normal(loc=loc, scale=t.exp(logsigma))
 
     def decode(self, z: t.Tensor) -> Tuple[Distribution, Sequence[t.Tensor]]:  # p(x|z)
@@ -282,7 +282,7 @@ class VAENCA(Model, nn.Module):
         reconstruction_loss = -logpx_given_z.mean()
         kl_loss = kld.mean()
 
-        loss = reconstruction_loss + 100*kl_loss
+        loss = reconstruction_loss + kl_loss
         return loss, reconstruction_loss, kl_loss  # (1,)
 
 
