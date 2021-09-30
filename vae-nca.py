@@ -40,7 +40,7 @@ class VAENCA(Model, nn.Module):
         self.n_mixtures = 1
         batch_size = 32
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        self.dataset = "celeba"  # celeba
+        self.dataset = "emoji"  # celeba
         assert self.dataset in {'emoji', 'celeba'}
         self.n_channels = 3
 
@@ -90,7 +90,11 @@ class VAENCA(Model, nn.Module):
 
         data_dir = os.environ.get('DATA_DIR') or "."
 
-        tp = transforms.Compose([transforms.Lambda(lambda img: img.convert("RGB")), transforms.Resize((self.h, self.w)), transforms.ToTensor()])
+        def rgba_to_rgb_white_alpha(img):
+            background = Image.new('RGBA', img.size, (255, 255, 255))
+            return Image.alpha_composite(background, img).convert("RGB")
+
+        tp = transforms.Compose([transforms.Lambda(rgba_to_rgb_white_alpha), transforms.Resize((self.h, self.w)), transforms.ToTensor()])
         if self.dataset == 'emoji':
             train_data, val_data = NotoEmoji(data_dir, tp).train_val_split()
         elif self.dataset == 'celeba':
@@ -108,7 +112,7 @@ class VAENCA(Model, nn.Module):
         print("Total: %d" % total)
 
         self.to(self.device)
-        self.optimizer = optim.Adam(self.parameters(), lr=3e-4)
+        self.optimizer = optim.Adam(self.parameters(), lr=1e-4)
         self.batch_idx = 0
 
     def train_batch(self):
@@ -119,7 +123,7 @@ class VAENCA(Model, nn.Module):
         loss, z, p_x_given_z, recon_loss, kl_loss = self.forward(x, self.train_samples, self.train_loss_fn)
         loss.backward()
 
-        t.nn.utils.clip_grad_norm_(self.parameters(), 1.0)
+        t.nn.utils.clip_grad_norm_(self.parameters(), 10.0)
 
         self.optimizer.step()
 
@@ -289,4 +293,5 @@ class VAENCA(Model, nn.Module):
 if __name__ == "__main__":
     model = VAENCA()
     model.eval_batch()
+    exit(0)
     train(model, n_updates=100_000, eval_interval=100)
