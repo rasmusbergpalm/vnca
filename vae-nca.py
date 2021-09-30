@@ -293,5 +293,4 @@ class VAENCA(Model, nn.Module):
 if __name__ == "__main__":
     model = VAENCA()
     model.eval_batch()
-    exit(0)
     train(model, n_updates=100_000, eval_interval=100)
