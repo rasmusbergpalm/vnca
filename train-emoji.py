@@ -8,7 +8,7 @@ import tqdm
 from torchvision import transforms
 
 import util
-from modules.nca import MitosisNCA
+from modules.nca import NCA
 import torch as t
 
 from modules.sobel_perception import SobelConv
@@ -37,7 +37,7 @@ class Model(t.nn.Module):
         update_net[-1].weight.data.fill_(0.0)
         update_net[-1].bias.data.fill_(0.0)
 
-        self.nca = MitosisNCA(self.h, self.w, self.c, update_net, self.n_duplications, self.steps_per_duplication, 3)
+        self.nca = NCA(self.h, self.w, self.c, update_net, self.n_duplications, self.steps_per_duplication, 3)
         self.target = self.load_emoji('🐠', 64)
         self.optim = t.optim.Adam(self.parameters(), lr=2e-3)
         self.to(self.device)

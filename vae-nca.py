@@ -16,7 +16,7 @@ import tqdm
 from data.mnist import StaticMNIST
 from iterable_dataset_wrapper import IterableWrapper
 from modules.model import Model
-from modules.nca import MitosisNCA
+from modules.nca import NCA
 from modules.residual import Residual
 from train import train
 from util import get_writers
@@ -28,12 +28,12 @@ class VAENCA(Model, nn.Module):
     def __init__(self):
         super(Model, self).__init__()
         self.h = self.w = 32
-        self.z_size = 256
+        self.z_size = 128
         self.train_loss_fn = self.elbo_loss_function
         self.train_samples = 1
         self.test_loss_fn = self.iwae_loss_fn
         self.test_samples = 1
-        self.nca_hid = 256
+        self.nca_hid = 128
         self.encoder_hid = 32
         batch_size = 32
         self.bpd_dimensions = 1 * 28 * 28
@@ -63,22 +63,12 @@ class VAENCA(Model, nn.Module):
                 t.nn.ELU(),
                 t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
             ),
-            Residual(
-                t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
-                t.nn.ELU(),
-                t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
-            ),
-            Residual(
-                t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
-                t.nn.ELU(),
-                t.nn.Conv2d(self.nca_hid, self.nca_hid, 1),
-            ),
             t.nn.Conv2d(self.nca_hid, self.z_size, 1)
         )
         update_net[-1].weight.data.fill_(0.0)
         update_net[-1].bias.data.fill_(0.0)
 
-        self.nca = MitosisNCA(self.h, self.w, self.z_size, update_net, int(np.log2(self.h)) - 1, 8, 1.0)
+        self.nca = NCA(update_net, 32, 64, 0.5)
         self.p_z = Normal(t.zeros(self.z_size, device=self.device), t.ones(self.z_size, device=self.device))
 
         data_dir = os.environ.get('DATA_DIR') or "."
@@ -87,7 +77,7 @@ class VAENCA(Model, nn.Module):
         self.test_set = StaticMNIST(data_dir, 'test')
         self.train_loader = iter(DataLoader(IterableWrapper(train_data), batch_size=batch_size, pin_memory=True))
         self.test_loader = iter(DataLoader(IterableWrapper(self.test_set), batch_size=batch_size, pin_memory=True))
-        self.train_writer, self.test_writer = get_writers("hierarchical-nca")
+        self.train_writer, self.test_writer = get_writers("vnca")
 
         print(self)
         for n, p in self.named_parameters():
@@ -172,20 +162,7 @@ class VAENCA(Model, nn.Module):
         return samples, recons, growth
 
     def to_rgb(self, samples):
-        return Bernoulli(logits=samples[:, :1, :, :]).sample()
-
-    def plot_growth_samples(self):
-        ShapeGuard.reset()
-        with torch.no_grad():
-            samples = self.p_z.sample((64, 1)).to(self.device)
-            _, states = self.decode(samples)
-            for i, state in enumerate(states):
-                samples = t.clip(state[:, :4, :, :], 0, 1).cpu().detach().numpy()
-                samples = self.to_rgb(samples)
-                samples = (samples * 255).astype(np.uint8)
-                grid = make_grid(samples).transpose(1, 2, 0)  # (HWC)
-                im = Image.fromarray(grid)
-                im.save("samples-%03d.png" % i)
+        return Bernoulli(logits=samples[:, :1, :, :] - 6.0).sample()
 
     def report(self, writer: SummaryWriter, p_x_given_z, loss, recon_loss, kl_loss):
         writer.add_scalar('loss', loss.item(), self.batch_idx)
@@ -212,12 +189,16 @@ class VAENCA(Model, nn.Module):
     def decode(self, z: t.Tensor) -> Tuple[Distribution, Sequence[t.Tensor]]:  # p(x|z)
         z.sg("Bnz")
         bs, ns, zs = z.shape
+        z[:, :, 0] += 6.0  # ensure seed cells are alive
+
         state = z.reshape((-1, self.z_size)).unsqueeze(2).unsqueeze(3).expand(-1, -1, 2, 2).sg("bz22")
+        pad = (self.h - 2) // 2
+        state = t.nn.functional.pad(state, [pad] * 4, mode="constant", value=0)
         states = self.nca(state)
 
         state = states[-1]
 
-        logits = state[:, :1, :, :].sg("b1hw").reshape((bs, ns, -1)).sg("Bnx")
+        logits = state[:, :1, :, :].sg("b1hw").reshape((bs, ns, -1)).sg("Bnx") - 6.0
 
         return Bernoulli(logits=logits), states
 
