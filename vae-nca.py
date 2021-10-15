@@ -92,7 +92,7 @@ class VAENCA(Model, nn.Module):
 
         self.optimizer.zero_grad()
         x, y = next(self.train_loader)
-        loss, z, p_x_given_z, recon_loss, kl_loss = self.forward(x, self.train_samples, self.train_loss_fn)
+        loss, z, p_x_given_z, recon_loss, kl_loss, states = self.forward(x, self.train_samples, self.train_loss_fn)
         loss.backward()
 
         t.nn.utils.clip_grad_norm_(self.parameters(), 10.0)
@@ -122,7 +122,7 @@ class VAENCA(Model, nn.Module):
         self.train(False)
         with t.no_grad():
             x, y = next(self.test_loader)
-            loss, z, p_x_given_z, recon_loss, kl_loss = self.forward(x, self.test_samples, self.test_loss_fn)
+            loss, z, p_x_given_z, recon_loss, kl_loss, states = self.forward(x, self.test_samples, self.test_loss_fn)
             self.report(self.test_writer, p_x_given_z, loss, recon_loss, kl_loss)
         return loss.item()
 
@@ -131,38 +131,44 @@ class VAENCA(Model, nn.Module):
         with t.no_grad():
             total_loss = 0.0
             for x, y in tqdm.tqdm(self.test_set.samples):
-                loss, z, p_x_given_z, recon_loss, kl_loss = self.forward(x, n_iw_samples, self.test_loss_fn)
+                loss, z, p_x_given_z, recon_loss, kl_loss, states = self.forward(x, n_iw_samples, self.test_loss_fn)
                 total_loss += loss
 
         print(total_loss / len(self.test_set))
 
-    def _plot_samples(self):
+    def _plot_samples(self, writer):
         ShapeGuard.reset()
         with torch.no_grad():
+            # samples
             samples = self.p_z.sample((64, 1)).to(self.device)
             decode, states = self.decode(samples)
-            samples = self.to_rgb(states[-1])
-            # rgb=0.3, alpha=0 --> samples = 1-0+0.3*0 = 1 = white
-            # rgb = 0.3, alpha=1 --> samples = 1-1+0.3*1 = 0.3
-            # rgb = 0.3, alpha=0.5, samples = 1-0.5+0.3*0.5 = 0.5+0.15 = 0.65
+            samples, samples_means = self.to_rgb(states[-1])
+            writer.add_images("samples/samples", samples, self.batch_idx)
+            writer.add_images("samples/means", samples_means, self.batch_idx)
 
-            growth = []
+            # Growths
+            growth_samples = []
+            growth_means = []
             for state in states:
-                rgb = self.to_rgb(state[0:1])
-                h = state.shape[3]
-                pad = (self.h - h) // 2
-                rgb = t.nn.functional.pad(rgb, [pad] * 4, mode="constant", value=0)
-                growth.append(rgb)
-            growth = t.cat(growth, dim=0).cpu().detach().numpy()  # (n_states, 3, h, w)
+                growth_sample, growth_mean = self.to_rgb(state[0:1])
+                growth_samples.append(growth_sample)
+                growth_means.append(growth_mean)
 
+            growth_samples = t.cat(growth_samples, dim=0).cpu().detach().numpy()  # (n_states, 3, h, w)
+            growth_means = t.cat(growth_means, dim=0).cpu().detach().numpy()  # (n_states, 3, h, w)
+            writer.add_images("growth/samples", growth_samples, self.batch_idx)
+            writer.add_images("growth/means", growth_means, self.batch_idx)
+
+            # Reconstructions
             x, y = next(self.test_loader)
-            _, _, p_x_given_z, _, _ = self.forward(x[:64], 1, self.iwae_loss_fn)
-            recons = self.to_rgb(p_x_given_z.logits.reshape(-1, 1, self.h, self.w))
-
-        return samples, recons, growth
+            _, _, p_x_given_z, _, _, states = self.forward(x[:64], 1, self.iwae_loss_fn)
+            recons_samples, recons_means = self.to_rgb(states[-1])
+            writer.add_images("recons/samples", recons_samples, self.batch_idx)
+            writer.add_images("recons/means", recons_means, self.batch_idx)
 
     def to_rgb(self, samples):
-        return Bernoulli(logits=samples[:, :1, :, :] - 6.0).sample()
+        dist = Bernoulli(logits=samples[:, :1, :, :] - 6.0)
+        return dist.sample(), dist.mean
 
     def report(self, writer: SummaryWriter, p_x_given_z, loss, recon_loss, kl_loss):
         writer.add_scalar('loss', loss.item(), self.batch_idx)
@@ -173,11 +179,7 @@ class VAENCA(Model, nn.Module):
         if kl_loss:
             writer.add_scalar('kl_loss', kl_loss.item(), self.batch_idx)
 
-        samples, recons, growth = self._plot_samples()
-        # writer.add_images("grid", grid, self.batch_idx)
-        writer.add_images("samples", samples, self.batch_idx)
-        writer.add_images("recons", recons, self.batch_idx)
-        writer.add_images("growth", growth, self.batch_idx)
+        self._plot_samples(writer)
 
     def encode(self, x) -> Distribution:  # q(z|x)
         x.sg("B4hw")
@@ -209,11 +211,11 @@ class VAENCA(Model, nn.Module):
         x_flat = x.reshape(x.shape[0], -1).sg("Bx")
         q_z_given_x = self.encode(x).sg("Bz")
         z = q_z_given_x.rsample((n_samples,)).permute((1, 0, 2)).sg("Bnz")
-        decode, _ = self.decode(z)
+        decode, states = self.decode(z)
         p_x_given_z = decode.sg("Bnx")
 
         loss, recon_loss, kl_loss = loss_fn(x_flat, p_x_given_z, q_z_given_x, z)
-        return loss, z, p_x_given_z, recon_loss, kl_loss
+        return loss, z, p_x_given_z, recon_loss, kl_loss, states
 
     def iwae_loss_fn(self, x: t.Tensor, p_x_given_z: Distribution, q_z_given_x: Distribution, z: t.Tensor):
         """
