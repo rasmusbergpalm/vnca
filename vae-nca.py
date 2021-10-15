@@ -191,7 +191,7 @@ class VAENCA(Model, nn.Module):
     def decode(self, z: t.Tensor) -> Tuple[Distribution, Sequence[t.Tensor]]:  # p(x|z)
         z.sg("Bnz")
         bs, ns, zs = z.shape
-        z[:, :, 0] += 6.0  # ensure seed cells are alive
+        z[:, :, 0] = 6.0  # ensure seed cells are alive
 
         state = z.reshape((-1, self.z_size)).unsqueeze(2).unsqueeze(3).expand(-1, -1, 2, 2).sg("bz22")
         pad = (self.h - 2) // 2
