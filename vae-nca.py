@@ -77,7 +77,7 @@ class VAENCA(Model, nn.Module):
         self.test_set = StaticMNIST(data_dir, 'test')
         self.train_loader = iter(DataLoader(IterableWrapper(train_data), batch_size=batch_size, pin_memory=True))
         self.test_loader = iter(DataLoader(IterableWrapper(self.test_set), batch_size=batch_size, pin_memory=True))
-        self.train_writer, self.test_writer = get_writers("vnca")
+        self.train_writer, self.test_writer = get_writers("hierarchical-nca")
 
         print(self)
         for n, p in self.named_parameters():
