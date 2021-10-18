@@ -35,7 +35,7 @@ class VAENCA(Model, nn.Module):
         self.test_samples = 1
         self.nca_hid = 128
         self.encoder_hid = 32
-        batch_size = 32
+        batch_size = 128
         self.bpd_dimensions = 1 * 28 * 28
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
 
