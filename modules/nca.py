@@ -29,7 +29,13 @@ class NCA(t.nn.Module):
         return state
 
     def alive_mask(self, state):
-        return max_pool2d(t.sigmoid(state[:, 0:1] - 6.0), kernel_size=(3, 3), stride=1, padding=1) > 0.01
+        x = max_pool2d(t.sigmoid(state[:, 0:1] - 6.0), kernel_size=(3, 3), stride=1, padding=1)
+        hard = x > 0.1
+        out = hard + x
+        with t.no_grad():
+            out = out - x
+
+        return out
 
     def forward(self, state):
         states = [state]
