@@ -30,10 +30,9 @@ class NCA(t.nn.Module):
 
     def alive_mask(self, state):
         x = max_pool2d(state[:, 0:1], kernel_size=(3, 3), stride=1, padding=1)
-        z = t.sigmoid(x - 6.0)
-        z2 = t.sigmoid(x - 6.0 - t.logit(t.tensor(0.1)))
-        hard = (z > 0.1).to(t.float32)
-        out = hard + z2 - z2.detach()
+        hard = (t.sigmoid(x - 6.0) > 0.1).to(t.float32)
+        soft = t.sigmoid(x - 6.0 - t.logit(t.tensor(0.1)))
+        out = hard + soft - soft.detach()
 
         return out
 
