@@ -24,7 +24,7 @@ class NCA(t.nn.Module):
         state = (state + update * rand_update_mask)
 
         post_alive_mask = self.alive_mask(state)
-        state = state * (post_alive_mask & pre_alive_mask)
+        state = state * (post_alive_mask * pre_alive_mask)
 
         return state
 
