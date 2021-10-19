@@ -18,13 +18,13 @@ class NCA(t.nn.Module):
 
     def step(self, state, rand_update_mask):
         state.sg("bc**")
-        pre_alive_mask = self.alive_mask(state)
+        # pre_alive_mask = self.alive_mask(state)
 
         update = self.update_net(state)
         state = (state + update * rand_update_mask)
 
-        post_alive_mask = self.alive_mask(state)
-        state = state * (post_alive_mask * pre_alive_mask)
+        # post_alive_mask = self.alive_mask(state)
+        state = state  # * (post_alive_mask * pre_alive_mask)
 
         return state
 
