@@ -54,10 +54,10 @@ class VAENCA(Model, nn.Module):
         update_net = t.nn.Sequential(
             t.nn.Conv2d(self.z_size, self.nca_hid, 3, padding=1),
             t.nn.ELU(),
-            t.nn.Conv2d(self.nca_hid, self.z_size, 1)
+            t.nn.Conv2d(self.nca_hid, self.z_size, 1, bias=False)
         )
         update_net[-1].weight.data.fill_(0.0)
-        update_net[-1].bias.data.fill_(0.0)
+        # update_net[-1].bias.data.fill_(0.0)
 
         self.nca = NCA(update_net, 32, 64, 0.5)
         self.p_z = Normal(t.zeros(self.z_size, device=self.device), t.ones(self.z_size, device=self.device))

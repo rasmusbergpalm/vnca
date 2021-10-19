@@ -18,13 +18,18 @@ class NCA(t.nn.Module):
 
     def step(self, state, rand_update_mask):
         state.sg("bc**")
+        pre_alive_mask = self.alive_mask(state)
+
         update = self.update_net(state)
         state = (state + update * rand_update_mask)
 
-        alive_mask = (max_pool2d(t.sigmoid(state[:, 0:1] - 6.0), kernel_size=(3, 3), stride=1, padding=1) > 0.1).to(t.float32)
-        state = state * alive_mask
+        post_alive_mask = self.alive_mask(state)
+        state = state * (post_alive_mask & pre_alive_mask).to(t.float32)
 
         return state
+
+    def alive_mask(self, state):
+        return max_pool2d(t.sigmoid(state[:, 0:1] - 6.0), kernel_size=(3, 3), stride=1, padding=1) > 0.1
 
     def forward(self, state):
         states = [state]
