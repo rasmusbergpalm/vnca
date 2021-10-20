@@ -158,7 +158,7 @@ class VAENCA(Model, nn.Module):
             writer.add_images("recons/means", recons_means, self.batch_idx)
 
     def to_rgb(self, samples):
-        dist = Bernoulli(logits=samples[:, :1, :, :] - 6.0)
+        dist = Bernoulli(logits=samples[:, :1, :, :])
         return dist.sample(), dist.mean
 
     def report(self, writer: SummaryWriter, p_x_given_z, loss, recon_loss, kl_loss):
@@ -184,14 +184,12 @@ class VAENCA(Model, nn.Module):
         bs, ns, zs = z.shape
         # z[:, :, 0] = 12.0  # ensure seed cells are alive
 
-        state = z.reshape((-1, self.z_size)).unsqueeze(2).unsqueeze(3).expand(-1, -1, 2, 2).sg("bz22")
-        pad = (self.h - 2) // 2
-        state = t.nn.functional.pad(state, [pad] * 4, mode="constant", value=0)
+        state = z.reshape((-1, self.z_size)).unsqueeze(2).unsqueeze(3).expand(-1, -1, self.h, self.w).sg("bzhw")
         states = self.nca(state)
 
         state = states[-1]
 
-        logits = state[:, :1, :, :].sg("b1hw").reshape((bs, ns, -1)).sg("Bnx") - 6.0
+        logits = state[:, :1, :, :].sg("b1hw").reshape((bs, ns, -1)).sg("Bnx")
 
         return Bernoulli(logits=logits), states
 
