@@ -210,8 +210,8 @@ class VAENCA(Model, nn.Module):
             self.pool = self.pool[n_pool_samples:]
 
             pool_x, pool_states, _ = zip(*worst)
-            pool_x = t.stack(pool_x)
-            pool_states = t.stack(pool_states)
+            pool_x = t.stack(pool_x).to(self.device)
+            pool_states = t.stack(pool_states).to(self.device)
             x[-n_pool_samples:] = pool_x
 
         q_z_given_x = self.encode(x).sg("Bz")
@@ -237,7 +237,7 @@ class VAENCA(Model, nn.Module):
             def split(tensor: t.Tensor):
                 return [x for x in tensor]
 
-            self.pool += list(zip(split(x), split(states[-1].detach()), loss.tolist()))
+            self.pool += list(zip(split(x.cpu()), split(states[-1].detach().cpu()), loss.tolist()))
             # Retain the worst
             self.pool = sorted(self.pool, key=lambda x: x[-1], reverse=True)
             self.pool = self.pool[:self.pool_size]
