@@ -238,8 +238,9 @@ class VAENCA(Model, nn.Module):
                 return [x for x in tensor]
 
             self.pool += list(zip(split(x.cpu()), split(states[-1].detach().cpu()), loss.tolist()))
-            # Retain a random set
-            random.shuffle(self.pool, key=lambda x: x[-1], reverse=True)
+            # Retain the worst
+            # self.pool = sorted(self.pool, key=lambda x: x[-1], reverse=True)
+            random.shuffle(self.pool)
             self.pool = self.pool[:self.pool_size]
 
         return loss, z, p_x_given_z, recon_loss, kl_loss, states
