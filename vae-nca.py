@@ -54,6 +54,7 @@ class VAENCA(Model, nn.Module):
             nn.Linear(self.encoder_hid * (2 ** 4) * self.h // 16 * self.w // 16, 2 * self.z_size),
         )
 
+
         update_net = t.nn.Sequential(
             t.nn.Conv2d(self.z_size, self.nca_hid, 3, padding=1),
             t.nn.ELU(),
