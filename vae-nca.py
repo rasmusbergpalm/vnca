@@ -1,4 +1,5 @@
 import os
+import random
 from typing import Sequence, Tuple
 
 import numpy as np
@@ -38,6 +39,8 @@ class VAENCA(Model, nn.Module):
         batch_size = 128
         self.bpd_dimensions = 1 * 28 * 28
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.pool = []
+        self.pool_size = 1024
 
         filter_size = (5, 5)
         pad = tuple(s // 2 for s in filter_size)
@@ -84,7 +87,7 @@ class VAENCA(Model, nn.Module):
         self.optimizer.zero_grad()
         x, y = next(self.train_loader)
         loss, z, p_x_given_z, recon_loss, kl_loss, states = self.forward(x, self.train_samples, self.train_loss_fn)
-        loss.backward()
+        loss.mean().backward()
 
         t.nn.utils.clip_grad_norm_(self.parameters(), 1.0, error_if_nonfinite=True)
 
@@ -94,7 +97,7 @@ class VAENCA(Model, nn.Module):
             self.report(self.train_writer, p_x_given_z, loss, recon_loss, kl_loss)
 
         self.batch_idx += 1
-        return loss.item()
+        return loss.mean().item()
 
     def save(self, fn):
         t.save({
@@ -115,7 +118,7 @@ class VAENCA(Model, nn.Module):
             x, y = next(self.test_loader)
             loss, z, p_x_given_z, recon_loss, kl_loss, states = self.forward(x, self.test_samples, self.test_loss_fn)
             self.report(self.test_writer, p_x_given_z, loss, recon_loss, kl_loss)
-        return loss.item()
+        return loss.mean().item()
 
     def test(self, n_iw_samples):
         self.train(False)
@@ -123,7 +126,7 @@ class VAENCA(Model, nn.Module):
             total_loss = 0.0
             for x, y in tqdm.tqdm(self.test_set.samples):
                 loss, z, p_x_given_z, recon_loss, kl_loss, states = self.forward(x, n_iw_samples, self.test_loss_fn)
-                total_loss += loss
+                total_loss += loss.mean().item()
 
         print(total_loss / len(self.test_set))
 
@@ -131,8 +134,8 @@ class VAENCA(Model, nn.Module):
         ShapeGuard.reset()
         with torch.no_grad():
             # samples
-            samples = self.p_z.sample((64, 1)).to(self.device)
-            decode, states = self.decode(samples)
+            samples = self.p_z.sample((64,)).view(64, -1, 1, 1).expand(64, -1, self.h, self.w).to(self.device)
+            states = self.decode(samples)
             samples, samples_means = self.to_rgb(states[-1])
             writer.add_images("samples/samples", samples, self.batch_idx)
             writer.add_images("samples/means", samples_means, self.batch_idx)
@@ -157,18 +160,26 @@ class VAENCA(Model, nn.Module):
             writer.add_images("recons/samples", recons_samples, self.batch_idx)
             writer.add_images("recons/means", recons_means, self.batch_idx)
 
+            # Pool
+            pool_xs, pool_states, pool_losses = zip(*random.sample(self.pool, min(len(self.pool), 64)))
+            pool_states = t.stack(pool_states)  # 64, z, h, w
+            pool_samples, pool_means = self.to_rgb(pool_states)
+            writer.add_images("pool/samples", pool_samples, self.batch_idx)
+            writer.add_images("pool/means", pool_means, self.batch_idx)
+
     def to_rgb(self, samples):
         dist = Bernoulli(logits=samples[:, :1, :, :])
         return dist.sample(), dist.mean
 
     def report(self, writer: SummaryWriter, p_x_given_z, loss, recon_loss, kl_loss):
-        writer.add_scalar('loss', loss.item(), self.batch_idx)
-        writer.add_scalar('bpd', loss.item() / (np.log(2) * self.bpd_dimensions), self.batch_idx)
+        writer.add_scalar('loss', loss.mean().item(), self.batch_idx)
+        writer.add_scalar('bpd', loss.mean().item() / (np.log(2) * self.bpd_dimensions), self.batch_idx)
         writer.add_scalar('entropy', p_x_given_z.entropy().mean().item(), self.batch_idx)
-        if recon_loss:
-            writer.add_scalar('recon_loss', recon_loss.item(), self.batch_idx)
-        if kl_loss:
-            writer.add_scalar('kl_loss', kl_loss.item(), self.batch_idx)
+        writer.add_scalar('pool_size', len(self.pool), self.batch_idx)
+        if recon_loss is not None:
+            writer.add_scalar('recon_loss', recon_loss.mean().item(), self.batch_idx)
+        if kl_loss is not None:
+            writer.add_scalar('kl_loss', kl_loss.mean().item(), self.batch_idx)
 
         self._plot_samples(writer)
 
@@ -180,30 +191,56 @@ class VAENCA(Model, nn.Module):
         return Normal(loc=loc, scale=t.exp(logsigma))
 
     def decode(self, z: t.Tensor) -> Tuple[Distribution, Sequence[t.Tensor]]:  # p(x|z)
-        z.sg("Bnz")
-        bs, ns, zs = z.shape
-        # z[:, :, 0] = 12.0  # ensure seed cells are alive
-
-        state = z.reshape((-1, self.z_size)).unsqueeze(2).unsqueeze(3).expand(-1, -1, self.h, self.w).sg("bzhw")
-        states = self.nca(state)
-
-        state = states[-1]
-
-        logits = state[:, :1, :, :].sg("b1hw").reshape((bs, ns, -1)).sg("Bnx")
-
-        return Bernoulli(logits=logits), states
+        z.sg("bzhw")
+        return self.nca(z)
 
     def forward(self, x, n_samples, loss_fn):
         ShapeGuard.reset()
         x.sg("B4hw")
         x = x.to(self.device)
-        x_flat = x.reshape(x.shape[0], -1).sg("Bx")
+
+        # Pool samples
+        bs = x.shape[0]
+        n_pool_samples = bs // 2
+        pool_states = None
+        if self.training and len(self.pool) > n_pool_samples:
+            # pop n_pool_samples worst in the pool
+            worst = self.pool[:n_pool_samples]
+            self.pool = self.pool[n_pool_samples:]
+
+            pool_x, pool_states, _ = zip(*worst)
+            pool_x = t.stack(pool_x)
+            pool_states = t.stack(pool_states)
+            x[-n_pool_samples:] = pool_x
+
         q_z_given_x = self.encode(x).sg("Bz")
         z = q_z_given_x.rsample((n_samples,)).permute((1, 0, 2)).sg("Bnz")
-        decode, states = self.decode(z)
-        p_x_given_z = decode.sg("Bnx")
 
+        seeds = (z.reshape((-1, self.z_size))  # stuff samples into batch dimension
+                 .unsqueeze(2)
+                 .unsqueeze(3)
+                 .expand(-1, -1, self.h, self.w).sg("bzhw"))
+
+        if pool_states is not None:
+            seeds = seeds.clone()
+            seeds[-n_pool_samples:] = pool_states  # yes this is wrong and will mess up the gradient.
+
+        states = self.decode(seeds)
+        p_x_given_z = Bernoulli(logits=states[-1][:, :1, :, :].sg("b1hw").reshape((bs, n_samples, -1)).sg("Bnx"))
+
+        x_flat = x.reshape(bs, -1).sg("Bx")
         loss, recon_loss, kl_loss = loss_fn(x_flat, p_x_given_z, q_z_given_x, z)
+
+        if self.training:
+            # Add states to pool
+            def split(tensor: t.Tensor):
+                return [x for x in tensor]
+
+            self.pool += list(zip(split(x), split(states[-1].detach()), loss.tolist()))
+            # Retain the worst
+            self.pool = sorted(self.pool, key=lambda x: x[-1], reverse=True)
+            self.pool = self.pool[:self.pool_size]
+
         return loss, z, p_x_given_z, recon_loss, kl_loss, states
 
     def iwae_loss_fn(self, x: t.Tensor, p_x_given_z: Distribution, q_z_given_x: Distribution, z: t.Tensor):
@@ -219,7 +256,7 @@ class VAENCA(Model, nn.Module):
         logpz = self.p_z.log_prob(z).sum(dim=2).sg("Bn")
         logqz_given_x = q_z_given_x.log_prob(z.permute((1, 0, 2))).sum(dim=2).permute((1, 0)).sg("Bn")
         logpx = (t.logsumexp(logpx_given_z + logpz - logqz_given_x, dim=1) - t.log(t.scalar_tensor(z.shape[1]))).sg("B")
-        return -logpx.mean(), None, None  # (1,)
+        return -logpx, None, None  # (B,)
 
     def elbo_loss_function(self, x: t.Tensor, p_x_given_z: Distribution, q_z_given_x: Distribution, z: t.Tensor):
         """
@@ -234,10 +271,10 @@ class VAENCA(Model, nn.Module):
         logpx_given_z = p_x_given_z.log_prob(x.unsqueeze(1).expand_as(p_x_given_z.mean)).sum(dim=2).mean(dim=1).sg("B")
         kld = kl_divergence(q_z_given_x, self.p_z).sum(dim=1).sg("B")
 
-        reconstruction_loss = -logpx_given_z.mean()
-        kl_loss = kld.mean()
+        reconstruction_loss = -logpx_given_z
+        kl_loss = kld
         loss = reconstruction_loss + kl_loss
-        return loss, reconstruction_loss, kl_loss  # (1,)
+        return loss, reconstruction_loss, kl_loss  # (B,)
 
 
 if __name__ == "__main__":
