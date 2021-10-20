@@ -161,11 +161,12 @@ class VAENCA(Model, nn.Module):
             writer.add_images("recons/means", recons_means, self.batch_idx)
 
             # Pool
-            pool_xs, pool_states, pool_losses = zip(*random.sample(self.pool, min(len(self.pool), 64)))
-            pool_states = t.stack(pool_states)  # 64, z, h, w
-            pool_samples, pool_means = self.to_rgb(pool_states)
-            writer.add_images("pool/samples", pool_samples, self.batch_idx)
-            writer.add_images("pool/means", pool_means, self.batch_idx)
+            if len(self.pool) > 0:
+                pool_xs, pool_states, pool_losses = zip(*random.sample(self.pool, min(len(self.pool), 64)))
+                pool_states = t.stack(pool_states)  # 64, z, h, w
+                pool_samples, pool_means = self.to_rgb(pool_states)
+                writer.add_images("pool/samples", pool_samples, self.batch_idx)
+                writer.add_images("pool/means", pool_means, self.batch_idx)
 
     def to_rgb(self, samples):
         dist = Bernoulli(logits=samples[:, :1, :, :])
