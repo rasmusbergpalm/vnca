@@ -198,7 +198,7 @@ class VAENCA(Model, nn.Module):
         return self.nca(z)
 
     def damage(self, states):
-        states.sg("bzhw")
+        states.sg("*zhw")
         mask = t.ones_like(states)
         for i in range(states.shape[0]):
             h1 = random.randint(0, states.shape[2] - self.dmg_size)
