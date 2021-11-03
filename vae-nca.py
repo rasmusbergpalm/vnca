@@ -41,6 +41,8 @@ class VAENCA(Model, nn.Module):
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.pool = []
         self.pool_size = 1024
+        self.n_damage = 32
+        self.dmg_size = 14
 
         filter_size = (5, 5)
         pad = tuple(s // 2 for s in filter_size)
@@ -53,7 +55,6 @@ class VAENCA(Model, nn.Module):
             nn.Flatten(),  # (bs, 512*h//16*w//16)
             nn.Linear(self.encoder_hid * (2 ** 4) * self.h // 16 * self.w // 16, 2 * self.z_size),
         )
-
 
         update_net = t.nn.Sequential(
             t.nn.Conv2d(self.z_size, self.nca_hid, 3, padding=1),
@@ -196,6 +197,15 @@ class VAENCA(Model, nn.Module):
         z.sg("bzhw")
         return self.nca(z)
 
+    def damage(self, states):
+        states.sg("bzhw")
+        mask = t.ones_like(states)
+        for i in range(states.shape[0]):
+            h1 = random.randint(0, states.shape[2] - self.dmg_size)
+            w1 = random.randint(0, states.shape[3] - self.dmg_size)
+            mask[i, :, h1:h1 + self.dmg_size, w1:w1 + self.dmg_size] = 0.0
+        return states * mask
+
     def forward(self, x, n_samples, loss_fn):
         ShapeGuard.reset()
         x.sg("B4hw")
@@ -207,12 +217,13 @@ class VAENCA(Model, nn.Module):
         pool_states = None
         if self.training and len(self.pool) > n_pool_samples:
             # pop n_pool_samples worst in the pool
-            worst = self.pool[:n_pool_samples]
+            pool_samples = self.pool[:n_pool_samples]
             self.pool = self.pool[n_pool_samples:]
 
-            pool_x, pool_states, _ = zip(*worst)
+            pool_x, pool_states, _ = zip(*pool_samples)
             pool_x = t.stack(pool_x).to(self.device)
             pool_states = t.stack(pool_states).to(self.device)
+            pool_states[:self.n_damage] = self.damage(pool_states[:self.n_damage])
             x[-n_pool_samples:] = pool_x
 
         q_z_given_x = self.encode(x).sg("Bz")
