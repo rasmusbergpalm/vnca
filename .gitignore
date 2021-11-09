@@ -2,4 +2,4 @@ venv
 .idea
 *.iml
 __pycache__/
-data
+data_dir

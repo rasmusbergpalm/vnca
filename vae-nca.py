@@ -5,20 +5,17 @@ from typing import Sequence, Tuple
 import numpy as np
 import torch as t
 import torch.utils.data
-from PIL import Image
+import tqdm
 from shapeguard import ShapeGuard
 from torch import nn, optim
 from torch.distributions import Normal, Distribution, kl_divergence, Bernoulli
 from torch.utils.data import DataLoader, ConcatDataset
 from torch.utils.tensorboard import SummaryWriter
-from torch.utils.tensorboard._utils import make_grid
-import tqdm
 
 from data.mnist import StaticMNIST
-from iterable_dataset_wrapper import IterableWrapper
+from modules.iterable_dataset_wrapper import IterableWrapper
 from modules.model import Model
 from modules.nca import NCA
-from modules.residual import Residual
 from train import train
 from util import get_writers
 
@@ -67,7 +64,7 @@ class VAENCA(Model, nn.Module):
         self.nca = NCA(update_net, 32, 64, 0.5)
         self.p_z = Normal(t.zeros(self.z_size, device=self.device), t.ones(self.z_size, device=self.device))
 
-        data_dir = os.environ.get('DATA_DIR') or "."
+        data_dir = os.environ.get('DATA_DIR') or "data_dir"
         train_data, val_data = StaticMNIST(data_dir, 'train'), StaticMNIST(data_dir, 'val'),
         train_data = ConcatDataset((train_data, val_data))
         self.test_set = StaticMNIST(data_dir, 'test')
