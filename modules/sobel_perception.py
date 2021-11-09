@@ -1,5 +1,4 @@
 import torch as t
-import shapeguard
 
 
 class SobelConv(t.nn.Module):
@@ -14,7 +13,6 @@ class SobelConv(t.nn.Module):
         self.sobel_y = self.sobel_x.permute(0, 1, 3, 2)
 
     def forward(self, state):
-        state.sg("bchw")
         # Convolve sobel filters with states
         # in x, y and channel dimension.
         grad_x = t.conv2d(state, self.sobel_x, groups=self.channels_in, padding=1)
@@ -22,4 +20,4 @@ class SobelConv(t.nn.Module):
         # Concatenate the cell’s state channels,
         # the gradients of channels in x and
         # the gradient of channels in y.
-        return t.cat([state, grad_x, grad_y], dim=1).sg("bphw")
+        return t.cat([state, grad_x, grad_y], dim=1)

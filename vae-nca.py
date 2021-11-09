@@ -13,13 +13,12 @@ from torch.utils.tensorboard import SummaryWriter
 from torch.utils.tensorboard._utils import make_grid
 from torchvision import transforms, datasets
 
-from iterable_dataset_wrapper import IterableWrapper
-from logistic import DiscreteLogistic
+from modules.iterable_dataset_wrapper import IterableWrapper
 from modules.dml import DiscretizedMixtureLogitsDistribution
 from modules.model import Model
 from modules.nca import MitosisNCA
 from modules.residual import Residual
-from noto import NotoEmoji
+from modules.noto import NotoEmoji
 from train import train
 from util import get_writers
 
