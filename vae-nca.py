@@ -88,7 +88,7 @@ class VAENCA(Model, nn.Module):
         # self.log_sigma = t.nn.Parameter(-2 * t.ones((4,), device=self.device), requires_grad=True)
         self.p_z = Normal(t.zeros(self.z_size, device=self.device), t.ones(self.z_size, device=self.device))
 
-        data_dir = os.environ.get('DATA_DIR') or "."
+        data_dir = os.environ.get('DATA_DIR') or "data"
 
         def rgba_to_rgb_white_alpha(img):
             background = Image.new('RGBA', img.size, (255, 255, 255))
