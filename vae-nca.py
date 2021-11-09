@@ -155,6 +155,17 @@ class VAENCA(Model, nn.Module):
             writer.add_images("growth/samples", growth_samples, self.batch_idx)
             writer.add_images("growth/means", growth_means, self.batch_idx)
 
+            # Damage
+            state = states[-1]
+            _, original_means = self.to_rgb(state)
+            writer.add_images("dmg/1-pre", original_means, self.batch_idx)
+            dmg = self.damage(state)
+            _, dmg_means = self.to_rgb(dmg)
+            writer.add_images("dmg/2-dmg", dmg_means, self.batch_idx)
+            recovered = self.nca(state)
+            _, recovered_means = self.to_rgb(recovered[-1])
+            writer.add_images("dmg/3-post", recovered_means, self.batch_idx)
+
             # Reconstructions
             x, y = next(self.test_loader)
             _, _, p_x_given_z, _, _, states = self.forward(x[:64], 1, self.iwae_loss_fn)
