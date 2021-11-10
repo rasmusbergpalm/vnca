@@ -8,11 +8,12 @@ import torch.utils.data
 import tqdm
 from shapeguard import ShapeGuard
 from torch import nn, optim
-from torch.distributions import Normal, Distribution, kl_divergence, Bernoulli
-from torch.utils.data import DataLoader, ConcatDataset
+from torch.distributions import Normal, Distribution, kl_divergence
+from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
+from torchvision import transforms, datasets
 
-from tasks.mnist.data import StaticMNIST
+from modules.dml import DiscretizedMixtureLogitsDistribution
 from modules.iterable_dataset_wrapper import IterableWrapper
 from modules.model import Model
 from modules.nca import NCA
@@ -25,7 +26,7 @@ from util import get_writers
 class VNCA(Model):
     def __init__(self):
         super(Model, self).__init__()
-        self.h = self.w = 32
+        self.h = self.w = 64
         self.z_size = 128
         self.train_loss_fn = self.elbo_loss_function
         self.train_samples = 1
@@ -33,18 +34,20 @@ class VNCA(Model):
         self.test_samples = 1
         self.nca_hid = 128
         self.encoder_hid = 32
-        batch_size = 128
-        self.bpd_dimensions = 1 * 28 * 28
+        self.n_mixtures = 1
+        self.bpd_dimensions = 3 * 64 * 64
+        batch_size = 32
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.n_channels = 3
         self.pool = []
         self.pool_size = 1024
-        self.n_damage = 32
+        self.n_damage = 8
         self.dmg_size = 14
 
         filter_size = (5, 5)
         pad = tuple(s // 2 for s in filter_size)
         self.encoder = nn.Sequential(
-            nn.Conv2d(1, self.encoder_hid * 2 ** 0, filter_size, padding=pad), nn.ELU(),  # (bs, 32, h, w)
+            nn.Conv2d(self.n_channels, self.encoder_hid * 2 ** 0, filter_size, padding=pad), nn.ELU(),  # (bs, 32, h, w)
             nn.Conv2d(self.encoder_hid * 2 ** 0, self.encoder_hid * 2 ** 1, filter_size, padding=pad, stride=2), nn.ELU(),  # (bs, 64, h//2, w//2)
             nn.Conv2d(self.encoder_hid * 2 ** 1, self.encoder_hid * 2 ** 2, filter_size, padding=pad, stride=2), nn.ELU(),  # (bs, 128, h//4, w//4)
             nn.Conv2d(self.encoder_hid * 2 ** 2, self.encoder_hid * 2 ** 3, filter_size, padding=pad, stride=2), nn.ELU(),  # (bs, 256, h//8, w//8)
@@ -65,16 +68,19 @@ class VNCA(Model):
         self.p_z = Normal(t.zeros(self.z_size, device=self.device), t.ones(self.z_size, device=self.device))
 
         data_dir = os.environ.get('DATA_DIR') or "data"
-        train_data, val_data = StaticMNIST(data_dir, 'train'), StaticMNIST(data_dir, 'val'),
-        train_data = ConcatDataset((train_data, val_data))
-        self.test_set = StaticMNIST(data_dir, 'test')
+
+        tp = transforms.Compose([transforms.Resize((self.h, self.w)), transforms.ToTensor()])
+        train_data, val_data = datasets.CelebA(data_dir, split="train", download=True, transform=tp), datasets.CelebA(data_dir, split="valid", download=True, transform=tp)
+
         self.train_loader = iter(DataLoader(IterableWrapper(train_data), batch_size=batch_size, pin_memory=True))
-        self.test_loader = iter(DataLoader(IterableWrapper(self.test_set), batch_size=batch_size, pin_memory=True))
+        self.test_loader = iter(DataLoader(IterableWrapper(val_data), batch_size=batch_size, pin_memory=True))
         self.train_writer, self.test_writer = get_writers("hierarchical-nca")
 
         print(self)
+        total = sum(p.numel() for p in self.parameters())
         for n, p in self.named_parameters():
-            print(n, p.shape)
+            print(n, p.shape, p.numel(), "%.1f" % (p.numel() / total * 100))
+        print("Total: %d" % total)
 
         self.to(self.device)
         self.optimizer = optim.Adam(self.parameters(), lr=1e-4)
@@ -165,9 +171,9 @@ class VNCA(Model):
                 writer.add_images("pool/samples", pool_samples, self.batch_idx)
                 writer.add_images("pool/means", pool_means, self.batch_idx)
 
-    def to_rgb(self, samples):
-        dist = Bernoulli(logits=samples[:, :1, :, :])
-        return dist.sample(), dist.mean
+    def to_rgb(self, state):
+        dml = DiscretizedMixtureLogitsDistribution(self.n_mixtures, state[:, :self.n_mixtures * 10, :, :])
+        return (dml.sample() + 1) / 2, (dml.sample() + 1) / 2  # todo mean
 
     def report(self, writer: SummaryWriter, p_x_given_z, loss, recon_loss, kl_loss):
         writer.add_scalar('loss', loss.mean().item(), self.batch_idx)
@@ -181,7 +187,7 @@ class VNCA(Model):
         self._plot_samples(writer)
 
     def encode(self, x) -> Distribution:  # q(z|x)
-        x.sg("B4hw")
+        x.sg(("B", 3, "h", "w"))
         q = self.encoder(x).sg("BZ")
         loc = q[:, :self.z_size].sg("Bz")
         logsigma = q[:, self.z_size:].sg("Bz")
@@ -202,7 +208,7 @@ class VNCA(Model):
 
     def forward(self, x, n_samples, loss_fn):
         ShapeGuard.reset()
-        x.sg("B4hw")
+        x.sg(("B", 3, "h", "w"))
         x = x.to(self.device)
 
         # Pool samples
@@ -233,10 +239,9 @@ class VNCA(Model):
             seeds[-n_pool_samples:] = pool_states  # yes this is wrong and will mess up the gradient.
 
         states = self.decode(seeds)
-        p_x_given_z = Bernoulli(logits=states[-1][:, :1, :, :].sg("b1hw").reshape((bs, n_samples, -1)).sg("Bnx"))
 
-        x_flat = x.reshape(bs, -1).sg("Bx")
-        loss, recon_loss, kl_loss = loss_fn(x_flat, p_x_given_z, q_z_given_x, z)
+        p_x_given_z = DiscretizedMixtureLogitsDistribution(self.n_mixtures, states[-1][:, :self.n_mixtures * 10, :, :])
+        loss, recon_loss, kl_loss = loss_fn(x, p_x_given_z, q_z_given_x, z)
 
         if self.training:
             # Add states to pool
@@ -255,34 +260,45 @@ class VNCA(Model):
         """
           log(p(x)) >= logsumexp_{i=1}^N[ log(p(x|z_i)) + log(p(z_i)) - log(q(z_i|x))] - log(N)
         """
-        x.sg("Bx")
-        p_x_given_z.sg("Bnx")
-        q_z_given_x.sg("Bz")
-        z.sg("Bnz")
+        x.sg(("B", 3, "h", "w"))
+        p_x_given_z.sg(("b", self.n_mixtures * 10, "h", "w"))
+        q_z_given_x.sg("*z")
+        z.sg("*nz")
+        B, n, zs = z.shape
 
-        logpx_given_z = p_x_given_z.log_prob(x.unsqueeze(1).expand_as(p_x_given_z.mean)).sum(dim=2).sg("Bn")
-        logpz = self.p_z.log_prob(z).sum(dim=2).sg("Bn")
-        logqz_given_x = q_z_given_x.log_prob(z.permute((1, 0, 2))).sum(dim=2).permute((1, 0)).sg("Bn")
-        logpx = (t.logsumexp(logpx_given_z + logpz - logqz_given_x, dim=1) - t.log(t.scalar_tensor(z.shape[1]))).sg("B")
-        return -logpx, None, None  # (B,)
+        x = (x.unsqueeze(1)
+             .expand((-1, n, -1, -1, -1))
+             .reshape(-1, 3, self.h, self.w)
+             ).sg(("b", 3, self.h, self.w))
+        logpx_given_z = p_x_given_z.log_prob(x).sum(dim=(1, 2)).sg("*").reshape((B, n))
+        logpz = self.p_z.log_prob(z).sum(dim=2).sg("*n")
+        logqz_given_x = q_z_given_x.log_prob(z.permute((1, 0, 2))).sum(dim=2).permute((1, 0)).sg("*n")
+        logpx = (t.logsumexp(logpx_given_z + logpz - logqz_given_x, dim=1) - t.log(t.scalar_tensor(z.shape[1]))).sg("*")
+        return -logpx, None, None  # (1,)
 
     def elbo_loss_function(self, x: t.Tensor, p_x_given_z: Distribution, q_z_given_x: Distribution, z: t.Tensor):
         """
           log p(x) >= E_q(z|x) [ log p(x|z) p(z) / q(z|x) ]
           Reconstruction + KL divergence losses summed over all elements and batch
         """
-        x.sg("Bx")
-        p_x_given_z.sg("Bnx")
-        q_z_given_x.sg("Bz")
-        z.sg("Bnz")
+        x.sg(("B", 3, "h", "w"))
+        p_x_given_z.sg(("b", self.n_mixtures * 10, "h", "w"))
+        q_z_given_x.sg("*z")
+        z.sg("*nz")
+        B, n, zs = z.shape
 
-        logpx_given_z = p_x_given_z.log_prob(x.unsqueeze(1).expand_as(p_x_given_z.mean)).sum(dim=2).mean(dim=1).sg("B")
-        kld = kl_divergence(q_z_given_x, self.p_z).sum(dim=1).sg("B")
+        x = (x.unsqueeze(1)
+             .expand((-1, n, -1, -1, -1))
+             .reshape(-1, 3, self.h, self.w)
+             ).sg(("b", 3, self.h, self.w))
+        logpx_given_z = p_x_given_z.log_prob(x).sum(dim=(1, 2)).sg("*").reshape((B, n)).mean(dim=1).sg("*")
+        kld = kl_divergence(q_z_given_x, self.p_z).sum(dim=1).sg("*")
 
         reconstruction_loss = -logpx_given_z
         kl_loss = kld
+
         loss = reconstruction_loss + kl_loss
-        return loss, reconstruction_loss, kl_loss  # (B,)
+        return loss, reconstruction_loss, kl_loss  # (1,)
 
 
 if __name__ == "__main__":
