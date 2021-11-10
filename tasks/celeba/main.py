@@ -21,6 +21,7 @@ if __name__ == "__main__":
     n_channels = 3
 
 
+
     def state_to_dist(state):
         return DiscretizedMixtureLogitsDistribution(n_mixtures, state[:, :n_mixtures * 10, :, :])
 
