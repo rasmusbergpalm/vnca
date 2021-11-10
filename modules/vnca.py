@@ -41,8 +41,6 @@ class VNCA(Model):
         self.n_channels = n_channels
         self.state_to_dist = states_to_dist
         self.z_size = z_size
-        self.test_loss_fn = iwae
-        self.test_samples = 3
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
 
         self.pool = []
@@ -224,7 +222,7 @@ class VNCA(Model):
 
             # Reconstructions
             x, y = next(self.val_loader)
-            _, _, p_x_given_z, _, _, states = self.forward(x[:64], 1, self.test_loss_fn)
+            _, _, p_x_given_z, _, _, states = self.forward(x[:64], 1, iwae)
             recons_samples, recons_means = self.to_rgb(states[-1])
             writer.add_images("recons/samples", recons_samples, self.batch_idx)
             writer.add_images("recons/means", recons_means, self.batch_idx)
