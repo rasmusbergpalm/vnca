@@ -12,7 +12,7 @@ from torch.distributions import Normal, Distribution, kl_divergence, Bernoulli
 from torch.utils.data import DataLoader, ConcatDataset
 from torch.utils.tensorboard import SummaryWriter
 
-from data.mnist import StaticMNIST
+from tasks.mnist.data import StaticMNIST
 from modules.iterable_dataset_wrapper import IterableWrapper
 from modules.model import Model
 from modules.nca import NCA
@@ -22,7 +22,7 @@ from util import get_writers
 
 # torch.autograd.set_detect_anomaly(True)
 
-class VAENCA(Model, nn.Module):
+class VNCA(Model):
     def __init__(self):
         super(Model, self).__init__()
         self.h = self.w = 32
@@ -64,7 +64,7 @@ class VAENCA(Model, nn.Module):
         self.nca = NCA(update_net, 32, 64, 0.5)
         self.p_z = Normal(t.zeros(self.z_size, device=self.device), t.ones(self.z_size, device=self.device))
 
-        data_dir = os.environ.get('DATA_DIR') or "data_dir"
+        data_dir = os.environ.get('DATA_DIR') or "data"
         train_data, val_data = StaticMNIST(data_dir, 'train'), StaticMNIST(data_dir, 'val'),
         train_data = ConcatDataset((train_data, val_data))
         self.test_set = StaticMNIST(data_dir, 'test')
@@ -97,19 +97,6 @@ class VAENCA(Model, nn.Module):
 
         self.batch_idx += 1
         return loss.mean().item()
-
-    def save(self, fn):
-        t.save({
-            'batch_idx': self.batch_idx,
-            'model_state_dict': self.state_dict(),
-            'optimizer_state_dict': self.optimizer.state_dict(),
-        }, fn)
-
-    def load(self, fn):
-        checkpoint = t.load(fn, map_location=t.device(self.device))
-        self.batch_idx = checkpoint["batch_idx"]
-        self.load_state_dict(checkpoint["model_state_dict"])
-        self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
 
     def eval_batch(self):
         self.train(False)
@@ -300,7 +287,7 @@ class VAENCA(Model, nn.Module):
 
 
 if __name__ == "__main__":
-    model = VAENCA()
+    model = VNCA()
     model.eval_batch()
     train(model, n_updates=100_000, eval_interval=100)
     model.test(128)
