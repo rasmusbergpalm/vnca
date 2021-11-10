@@ -57,7 +57,7 @@ class VNCA(Model):
         self.test_set = test_data
         self.train_loader = iter(DataLoader(IterableWrapper(train_data), batch_size=batch_size, pin_memory=True))
         self.val_loader = iter(DataLoader(IterableWrapper(val_data), batch_size=batch_size, pin_memory=True))
-        self.train_writer, self.test_writer = get_writers("hierarchical-nca")
+        self.train_writer, self.test_writer = get_writers("vnca")
 
         print(self)
         total = sum(p.numel() for p in self.parameters())
