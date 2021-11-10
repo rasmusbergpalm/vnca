@@ -91,7 +91,7 @@ class VNCA(Model):
         self.train(False)
         with t.no_grad():
             x, y = next(self.val_loader)
-            loss, z, p_x_given_z, recon_loss, kl_loss, states = self.forward(x, 3, iwae)
+            loss, z, p_x_given_z, recon_loss, kl_loss, states = self.forward(x, 1, iwae)
             self.report(self.test_writer, p_x_given_z, loss, recon_loss, kl_loss)
         return loss.mean().item()
 
