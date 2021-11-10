@@ -23,7 +23,7 @@ class DiscretizedMixtureLogitsDistribution(Distribution):
         """
         Returns the mean of the distribution.
         """
-        raise NotImplementedError("TODO")  # TODO
+        return self.sample()  # TODO
 
 
 class DiscretizedMixtureLogits():
