@@ -13,6 +13,7 @@ from torch.utils.data import DataLoader, ConcatDataset
 from torch.utils.tensorboard import SummaryWriter
 
 from modules.loss import elbo, iwae
+from modules.report import report
 from tasks.mnist.data import StaticMNIST
 from modules.iterable_dataset_wrapper import IterableWrapper
 from modules.model import Model
@@ -94,7 +95,7 @@ class VNCA(Model):
         self.optimizer.step()
 
         if self.batch_idx % 100 == 0:
-            self.report(self.train_writer, p_x_given_z, loss, recon_loss, kl_loss)
+            report(self, self.train_writer, p_x_given_z, loss, recon_loss, kl_loss)
 
         self.batch_idx += 1
         return loss.mean().item()
@@ -104,7 +105,7 @@ class VNCA(Model):
         with t.no_grad():
             x, y = next(self.test_loader)
             loss, z, p_x_given_z, recon_loss, kl_loss, states = self.forward(x, self.test_samples, self.test_loss_fn)
-            self.report(self.test_writer, p_x_given_z, loss, recon_loss, kl_loss)
+            report(self, self.test_writer, p_x_given_z, loss, recon_loss, kl_loss)
         return loss.mean().item()
 
     def test(self, n_iw_samples):
@@ -117,69 +118,9 @@ class VNCA(Model):
 
         print(total_loss / len(self.test_set))
 
-    def _plot_samples(self, writer):
-        ShapeGuard.reset()
-        with torch.no_grad():
-            # samples
-            samples = self.p_z.sample((64,)).view(64, -1, 1, 1).expand(64, -1, self.h, self.w).to(self.device)
-            states = self.decode(samples)
-            samples, samples_means = self.to_rgb(states[-1])
-            writer.add_images("samples/samples", samples, self.batch_idx)
-            writer.add_images("samples/means", samples_means, self.batch_idx)
-
-            # Growths
-            growth_samples = []
-            growth_means = []
-            for state in states:
-                growth_sample, growth_mean = self.to_rgb(state[0:1])
-                growth_samples.append(growth_sample)
-                growth_means.append(growth_mean)
-
-            growth_samples = t.cat(growth_samples, dim=0).cpu().detach().numpy()  # (n_states, 3, h, w)
-            growth_means = t.cat(growth_means, dim=0).cpu().detach().numpy()  # (n_states, 3, h, w)
-            writer.add_images("growth/samples", growth_samples, self.batch_idx)
-            writer.add_images("growth/means", growth_means, self.batch_idx)
-
-            # Damage
-            state = states[-1]
-            _, original_means = self.to_rgb(state)
-            writer.add_images("dmg/1-pre", original_means, self.batch_idx)
-            dmg = self.damage(state)
-            _, dmg_means = self.to_rgb(dmg)
-            writer.add_images("dmg/2-dmg", dmg_means, self.batch_idx)
-            recovered = self.nca(state)
-            _, recovered_means = self.to_rgb(recovered[-1])
-            writer.add_images("dmg/3-post", recovered_means, self.batch_idx)
-
-            # Reconstructions
-            x, y = next(self.test_loader)
-            _, _, p_x_given_z, _, _, states = self.forward(x[:64], 1, self.test_loss_fn)
-            recons_samples, recons_means = self.to_rgb(states[-1])
-            writer.add_images("recons/samples", recons_samples, self.batch_idx)
-            writer.add_images("recons/means", recons_means, self.batch_idx)
-
-            # Pool
-            if len(self.pool) > 0:
-                pool_xs, pool_states, pool_losses = zip(*random.sample(self.pool, min(len(self.pool), 64)))
-                pool_states = t.stack(pool_states)  # 64, z, h, w
-                pool_samples, pool_means = self.to_rgb(pool_states)
-                writer.add_images("pool/samples", pool_samples, self.batch_idx)
-                writer.add_images("pool/means", pool_means, self.batch_idx)
-
     def to_rgb(self, samples):
         dist = Bernoulli(logits=samples[:, :1, :, :])
         return dist.sample(), dist.mean
-
-    def report(self, writer: SummaryWriter, p_x_given_z, loss, recon_loss, kl_loss):
-        writer.add_scalar('loss', loss.mean().item(), self.batch_idx)
-        writer.add_scalar('bpd', loss.mean().item() / (np.log(2) * self.bpd_dimensions), self.batch_idx)
-        writer.add_scalar('pool_size', len(self.pool), self.batch_idx)
-        if recon_loss is not None:
-            writer.add_scalar('recon_loss', recon_loss.mean().item(), self.batch_idx)
-        if kl_loss is not None:
-            writer.add_scalar('kl_loss', kl_loss.mean().item(), self.batch_idx)
-
-        self._plot_samples(writer)
 
     def encode(self, x) -> Distribution:  # q(z|x)
         x.sg("B4hw")
