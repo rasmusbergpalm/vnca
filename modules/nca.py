@@ -1,9 +1,7 @@
 import random
 
 import torch as t
-import shapeguard
 from torch.utils.checkpoint import checkpoint
-from torch.nn.functional import max_pool2d
 
 
 class NCA(t.nn.Module):
@@ -17,7 +15,6 @@ class NCA(t.nn.Module):
         self.p_update = p_update
 
     def step(self, state, rand_update_mask):
-        state.sg("bc**")
         # pre_alive_mask = self.alive_mask(state)
 
         update = self.update_net(state)

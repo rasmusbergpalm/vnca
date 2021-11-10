@@ -30,9 +30,7 @@ class StaticMNIST(Dataset):
         file_path = dir + '/' + self.splits[split]
 
         with t.no_grad():
-            samples = t.from_numpy(np.genfromtxt(file_path, delimiter=' ', dtype=np.float32)).reshape((-1, 1, 28, 28))
-            samples = t.nn.functional.pad(samples, pad=[2, 2, 2, 2], mode="constant", value=0)
-            self.samples = samples
+            self.samples = t.from_numpy(np.genfromtxt(file_path, delimiter=' ', dtype=np.float32)).reshape((-1, 1, 28, 28))
 
     def __getitem__(self, index):
         return self.samples[index], 0  # placeholder label

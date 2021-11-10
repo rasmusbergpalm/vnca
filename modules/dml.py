@@ -7,15 +7,23 @@ from torch.distributions import Distribution
 
 class DiscretizedMixtureLogitsDistribution(Distribution):
     def __init__(self, nr_mix, logits):
+        super().__init__()
         self.logits = logits
         self.nr_mix = nr_mix
         self._batch_shape = logits.shape
 
     def log_prob(self, value):
-        return - discretized_mix_logistic_loss(value, self.logits).unsqueeze(1)  # add channel dim for compatibility with loss functions expecting bchw
+        return - discretized_mix_logistic_loss(value * 2 - 1, self.logits).unsqueeze(1)  # add channel dim for compatibility with loss functions expecting bchw
 
     def sample(self):
-        return sample_from_discretized_mix_logistic(self.logits, self.nr_mix)
+        return (sample_from_discretized_mix_logistic(self.logits, self.nr_mix) + 1) / 2
+
+    @property
+    def mean(self):
+        """
+        Returns the mean of the distribution.
+        """
+        raise NotImplementedError("TODO")  # TODO
 
 
 class DiscretizedMixtureLogits():
