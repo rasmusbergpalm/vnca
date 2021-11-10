@@ -12,7 +12,7 @@ class DiscretizedMixtureLogitsDistribution(Distribution):
         self._batch_shape = logits.shape
 
     def log_prob(self, value):
-        return - discretized_mix_logistic_loss(value, self.logits)
+        return - discretized_mix_logistic_loss(value, self.logits).unsqueeze(1)  # add channel dim for compatibility with loss functions expecting bchw
 
     def sample(self):
         return sample_from_discretized_mix_logistic(self.logits, self.nr_mix)

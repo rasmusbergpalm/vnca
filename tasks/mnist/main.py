@@ -12,6 +12,7 @@ from torch.distributions import Normal, Distribution, kl_divergence, Bernoulli
 from torch.utils.data import DataLoader, ConcatDataset
 from torch.utils.tensorboard import SummaryWriter
 
+from modules.loss import elbo, iwae
 from tasks.mnist.data import StaticMNIST
 from modules.iterable_dataset_wrapper import IterableWrapper
 from modules.model import Model
@@ -26,12 +27,12 @@ class VNCA(Model):
     def __init__(self):
         super(Model, self).__init__()
         self.h = self.w = 32
-        self.z_size = 128
-        self.train_loss_fn = self.elbo_loss_function
+        self.z_size = 9
+        self.train_loss_fn = elbo
         self.train_samples = 1
-        self.test_loss_fn = self.iwae_loss_fn
-        self.test_samples = 1
-        self.nca_hid = 128
+        self.test_loss_fn = iwae
+        self.test_samples = 3
+        self.nca_hid = 7
         self.encoder_hid = 32
         batch_size = 128
         self.bpd_dimensions = 1 * 28 * 28
@@ -152,7 +153,7 @@ class VNCA(Model):
 
             # Reconstructions
             x, y = next(self.test_loader)
-            _, _, p_x_given_z, _, _, states = self.forward(x[:64], 1, self.iwae_loss_fn)
+            _, _, p_x_given_z, _, _, states = self.forward(x[:64], 1, self.test_loss_fn)
             recons_samples, recons_means = self.to_rgb(states[-1])
             writer.add_images("recons/samples", recons_samples, self.batch_idx)
             writer.add_images("recons/means", recons_means, self.batch_idx)
@@ -202,7 +203,7 @@ class VNCA(Model):
 
     def forward(self, x, n_samples, loss_fn):
         ShapeGuard.reset()
-        x.sg("B4hw")
+        x.sg(("B", 1, "h", "w"))
         x = x.to(self.device)
 
         # Pool samples
@@ -233,10 +234,9 @@ class VNCA(Model):
             seeds[-n_pool_samples:] = pool_states  # yes this is wrong and will mess up the gradient.
 
         states = self.decode(seeds)
-        p_x_given_z = Bernoulli(logits=states[-1][:, :1, :, :].sg("b1hw").reshape((bs, n_samples, -1)).sg("Bnx"))
+        p_x_given_z = Bernoulli(logits=states[-1][:, :1, :, :])
 
-        x_flat = x.reshape(bs, -1).sg("Bx")
-        loss, recon_loss, kl_loss = loss_fn(x_flat, p_x_given_z, q_z_given_x, z)
+        loss, recon_loss, kl_loss = loss_fn(x, p_x_given_z, q_z_given_x, self.p_z, z)
 
         if self.training:
             # Add states to pool
@@ -250,39 +250,6 @@ class VNCA(Model):
             self.pool = self.pool[:self.pool_size]
 
         return loss, z, p_x_given_z, recon_loss, kl_loss, states
-
-    def iwae_loss_fn(self, x: t.Tensor, p_x_given_z: Distribution, q_z_given_x: Distribution, z: t.Tensor):
-        """
-          log(p(x)) >= logsumexp_{i=1}^N[ log(p(x|z_i)) + log(p(z_i)) - log(q(z_i|x))] - log(N)
-        """
-        x.sg("Bx")
-        p_x_given_z.sg("Bnx")
-        q_z_given_x.sg("Bz")
-        z.sg("Bnz")
-
-        logpx_given_z = p_x_given_z.log_prob(x.unsqueeze(1).expand_as(p_x_given_z.mean)).sum(dim=2).sg("Bn")
-        logpz = self.p_z.log_prob(z).sum(dim=2).sg("Bn")
-        logqz_given_x = q_z_given_x.log_prob(z.permute((1, 0, 2))).sum(dim=2).permute((1, 0)).sg("Bn")
-        logpx = (t.logsumexp(logpx_given_z + logpz - logqz_given_x, dim=1) - t.log(t.scalar_tensor(z.shape[1]))).sg("B")
-        return -logpx, None, None  # (B,)
-
-    def elbo_loss_function(self, x: t.Tensor, p_x_given_z: Distribution, q_z_given_x: Distribution, z: t.Tensor):
-        """
-          log p(x) >= E_q(z|x) [ log p(x|z) p(z) / q(z|x) ]
-          Reconstruction + KL divergence losses summed over all elements and batch
-        """
-        x.sg("Bx")
-        p_x_given_z.sg("Bnx")
-        q_z_given_x.sg("Bz")
-        z.sg("Bnz")
-
-        logpx_given_z = p_x_given_z.log_prob(x.unsqueeze(1).expand_as(p_x_given_z.mean)).sum(dim=2).mean(dim=1).sg("B")
-        kld = kl_divergence(q_z_given_x, self.p_z).sum(dim=1).sg("B")
-
-        reconstruction_loss = -logpx_given_z
-        kl_loss = kld
-        loss = reconstruction_loss + kl_loss
-        return loss, reconstruction_loss, kl_loss  # (B,)
 
 
 if __name__ == "__main__":

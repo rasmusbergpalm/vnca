@@ -15,6 +15,7 @@ from torchvision import transforms, datasets
 
 from modules.dml import DiscretizedMixtureLogitsDistribution
 from modules.iterable_dataset_wrapper import IterableWrapper
+from modules.loss import elbo, iwae
 from modules.model import Model
 from modules.nca import NCA
 from train import train
@@ -27,12 +28,12 @@ class VNCA(Model):
     def __init__(self):
         super(Model, self).__init__()
         self.h = self.w = 64
-        self.z_size = 128
-        self.train_loss_fn = self.elbo_loss_function
+        self.z_size = 15
+        self.train_loss_fn = elbo
         self.train_samples = 1
-        self.test_loss_fn = self.iwae_loss_fn
-        self.test_samples = 1
-        self.nca_hid = 128
+        self.test_loss_fn = iwae
+        self.test_samples = 3
+        self.nca_hid = 7
         self.encoder_hid = 32
         self.n_mixtures = 1
         self.bpd_dimensions = 3 * 64 * 64
@@ -158,7 +159,7 @@ class VNCA(Model):
 
             # Reconstructions
             x, y = next(self.test_loader)
-            _, _, p_x_given_z, _, _, states = self.forward(x[:64], 1, self.iwae_loss_fn)
+            _, _, p_x_given_z, _, _, states = self.forward(x[:64], 1, self.test_loss_fn)
             recons_samples, recons_means = self.to_rgb(states[-1])
             writer.add_images("recons/samples", recons_samples, self.batch_idx)
             writer.add_images("recons/means", recons_means, self.batch_idx)
@@ -241,7 +242,7 @@ class VNCA(Model):
         states = self.decode(seeds)
 
         p_x_given_z = DiscretizedMixtureLogitsDistribution(self.n_mixtures, states[-1][:, :self.n_mixtures * 10, :, :])
-        loss, recon_loss, kl_loss = loss_fn(x, p_x_given_z, q_z_given_x, z)
+        loss, recon_loss, kl_loss = loss_fn(x, p_x_given_z, q_z_given_x, self.p_z, z)
 
         if self.training:
             # Add states to pool
@@ -255,50 +256,6 @@ class VNCA(Model):
             self.pool = self.pool[:self.pool_size]
 
         return loss, z, p_x_given_z, recon_loss, kl_loss, states
-
-    def iwae_loss_fn(self, x: t.Tensor, p_x_given_z: Distribution, q_z_given_x: Distribution, z: t.Tensor):
-        """
-          log(p(x)) >= logsumexp_{i=1}^N[ log(p(x|z_i)) + log(p(z_i)) - log(q(z_i|x))] - log(N)
-        """
-        x.sg(("B", 3, "h", "w"))
-        p_x_given_z.sg(("b", self.n_mixtures * 10, "h", "w"))
-        q_z_given_x.sg("*z")
-        z.sg("*nz")
-        B, n, zs = z.shape
-
-        x = (x.unsqueeze(1)
-             .expand((-1, n, -1, -1, -1))
-             .reshape(-1, 3, self.h, self.w)
-             ).sg(("b", 3, self.h, self.w))
-        logpx_given_z = p_x_given_z.log_prob(x).sum(dim=(1, 2)).sg("*").reshape((B, n))
-        logpz = self.p_z.log_prob(z).sum(dim=2).sg("*n")
-        logqz_given_x = q_z_given_x.log_prob(z.permute((1, 0, 2))).sum(dim=2).permute((1, 0)).sg("*n")
-        logpx = (t.logsumexp(logpx_given_z + logpz - logqz_given_x, dim=1) - t.log(t.scalar_tensor(z.shape[1]))).sg("*")
-        return -logpx, None, None  # (1,)
-
-    def elbo_loss_function(self, x: t.Tensor, p_x_given_z: Distribution, q_z_given_x: Distribution, z: t.Tensor):
-        """
-          log p(x) >= E_q(z|x) [ log p(x|z) p(z) / q(z|x) ]
-          Reconstruction + KL divergence losses summed over all elements and batch
-        """
-        x.sg(("B", 3, "h", "w"))
-        p_x_given_z.sg(("b", self.n_mixtures * 10, "h", "w"))
-        q_z_given_x.sg("*z")
-        z.sg("*nz")
-        B, n, zs = z.shape
-
-        x = (x.unsqueeze(1)
-             .expand((-1, n, -1, -1, -1))
-             .reshape(-1, 3, self.h, self.w)
-             ).sg(("b", 3, self.h, self.w))
-        logpx_given_z = p_x_given_z.log_prob(x).sum(dim=(1, 2)).sg("*").reshape((B, n)).mean(dim=1).sg("*")
-        kld = kl_divergence(q_z_given_x, self.p_z).sum(dim=1).sg("*")
-
-        reconstruction_loss = -logpx_given_z
-        kl_loss = kld
-
-        loss = reconstruction_loss + kl_loss
-        return loss, reconstruction_loss, kl_loss  # (1,)
 
 
 if __name__ == "__main__":
