@@ -80,7 +80,7 @@ class VNCA(Model):
         self.optimizer.step()
 
         if self.batch_idx % 100 == 0:
-            self.report(self.train_writer, p_x_given_z, loss, recon_loss, kl_loss)
+            self.report(self.train_writer, states, loss, recon_loss, kl_loss)
 
         self.batch_idx += 1
         return loss.mean().item()
@@ -90,7 +90,7 @@ class VNCA(Model):
         with t.no_grad():
             x, y = next(self.val_loader)
             loss, z, p_x_given_z, recon_loss, kl_loss, states = self.forward(x, 1, iwae)
-            self.report(self.test_writer, p_x_given_z, loss, recon_loss, kl_loss)
+            self.report(self.test_writer, states, loss, recon_loss, kl_loss)
         return loss.mean().item()
 
     def test(self, n_iw_samples):
@@ -177,7 +177,7 @@ class VNCA(Model):
 
         return loss, z, p_x_given_z, recon_loss, kl_loss, states
 
-    def report(self, writer: SummaryWriter, p_x_given_z, loss, recon_loss, kl_loss):
+    def report(self, writer: SummaryWriter, recon_states, loss, recon_loss, kl_loss):
         writer.add_scalar('loss', loss.mean().item(), self.batch_idx)
         writer.add_scalar('bpd', loss.mean().item() / (np.log(2) * self.n_channels * self.h * self.w), self.batch_idx)
         writer.add_scalar('pool_size', len(self.pool), self.batch_idx)
@@ -221,9 +221,7 @@ class VNCA(Model):
             writer.add_images("dmg/3-post", recovered_means, self.batch_idx)
 
             # Reconstructions
-            x, y = next(self.val_loader)
-            _, _, p_x_given_z, _, _, states = self.forward(x[:64], 1, iwae)
-            recons_samples, recons_means = self.to_rgb(states[-1])
+            recons_samples, recons_means = self.to_rgb(recon_states[-1].detach())
             writer.add_images("recons/samples", recons_samples, self.batch_idx)
             writer.add_images("recons/means", recons_means, self.batch_idx)
 
