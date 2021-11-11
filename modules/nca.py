@@ -41,6 +41,6 @@ class NCA(t.nn.Module):
         for j in range(random.randint(self.min_steps, self.max_steps)):
             rand_update_mask = (t.rand((state.shape[0], 1, state.shape[2], state.shape[3]), device=self.device) < self.p_update).to(t.float32)
             state = checkpoint(self.step, state, rand_update_mask)
-            states.append(state)
+            states.append(state.detach())
 
-        return states
+        return states[:-1] + [state]
