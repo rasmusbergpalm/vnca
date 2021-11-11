@@ -36,7 +36,7 @@ if __name__ == "__main__":
         nn.Linear(encoder_hid * (2 ** 4) * h // 16 * w // 16, 2 * z_size),
     ))
 
-    update_net = DataParallel(nn.Sequential(
+    update_net = nn.Sequential(
         nn.Conv2d(z_size, nca_hid, 3, padding=1),
         nn.ELU(),
         nn.Conv2d(nca_hid, nca_hid, 1),
@@ -44,8 +44,9 @@ if __name__ == "__main__":
         nn.Conv2d(nca_hid, nca_hid, 1),
         nn.ELU(),
         nn.Conv2d(nca_hid, z_size, 1, bias=False)
-    ))
+    )
     update_net[-1].weight.data.fill_(0.0)
+    update_net = DataParallel(update_net)
 
     data_dir = os.environ.get('DATA_DIR') or "data"
     tp = transforms.Compose([transforms.Resize((h, w)), transforms.ToTensor()])
