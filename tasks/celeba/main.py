@@ -1,6 +1,7 @@
 import os
 
 from torch import nn
+from torch.nn import DataParallel
 from torchvision import transforms, datasets
 
 from modules.dml import DiscretizedMixtureLogitsDistribution
@@ -11,7 +12,7 @@ if __name__ == "__main__":
     z_size = 128
     nca_hid = 128
     n_mixtures = 1
-    batch_size = 32
+    batch_size = 128
     dmg_size = 32
 
     filter_size = 5
@@ -25,7 +26,7 @@ if __name__ == "__main__":
         return DiscretizedMixtureLogitsDistribution(n_mixtures, state[:, :n_mixtures * 10, :, :])
 
 
-    encoder = nn.Sequential(
+    encoder = DataParallel(nn.Sequential(
         nn.Conv2d(n_channels, encoder_hid * 2 ** 0, filter_size, padding=pad), nn.ELU(),  # (bs, 32, h, w)
         nn.Conv2d(encoder_hid * 2 ** 0, encoder_hid * 2 ** 1, filter_size, padding=pad, stride=2), nn.ELU(),  # (bs, 64, h//2, w//2)
         nn.Conv2d(encoder_hid * 2 ** 1, encoder_hid * 2 ** 2, filter_size, padding=pad, stride=2), nn.ELU(),  # (bs, 128, h//4, w//4)
@@ -33,9 +34,9 @@ if __name__ == "__main__":
         nn.Conv2d(encoder_hid * 2 ** 3, encoder_hid * 2 ** 4, filter_size, padding=pad, stride=2), nn.ELU(),  # (bs, 512, h//16, w//16),
         nn.Flatten(),  # (bs, 512*h//16*w//16)
         nn.Linear(encoder_hid * (2 ** 4) * h // 16 * w // 16, 2 * z_size),
-    )
+    ))
 
-    update_net = nn.Sequential(
+    update_net = DataParallel(nn.Sequential(
         nn.Conv2d(z_size, nca_hid, 3, padding=1),
         nn.ELU(),
         nn.Conv2d(nca_hid, nca_hid, 1),
@@ -43,7 +44,7 @@ if __name__ == "__main__":
         nn.Conv2d(nca_hid, nca_hid, 1),
         nn.ELU(),
         nn.Conv2d(nca_hid, z_size, 1, bias=False)
-    )
+    ))
     update_net[-1].weight.data.fill_(0.0)
 
     data_dir = os.environ.get('DATA_DIR') or "data"
