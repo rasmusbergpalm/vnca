@@ -11,7 +11,7 @@ if __name__ == "__main__":
     z_size = 128
     nca_hid = 128
     n_mixtures = 1
-    batch_size = 128
+    batch_size = 64
     dmg_size = 32
 
     filter_size = 5
