@@ -8,6 +8,7 @@ import tqdm
 from shapeguard import ShapeGuard
 from torch import optim
 from torch.distributions import Normal, Distribution
+from torch.utils.checkpoint import checkpoint_sequential
 from torch.utils.data import DataLoader, Dataset
 from torch.utils.tensorboard import SummaryWriter
 
@@ -109,7 +110,7 @@ class VNCA(Model):
 
     def encode(self, x) -> Distribution:  # q(z|x)
         x.sg("Bchw")
-        q = self.encoder(x).sg("BZ")
+        q = checkpoint_sequential(self.encoder, 2, x).sg("BZ")
         loc = q[:, :self.z_size].sg("Bz")
         logsigma = q[:, self.z_size:].sg("Bz")
         return Normal(loc=loc, scale=t.exp(logsigma))
