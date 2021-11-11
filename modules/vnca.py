@@ -196,18 +196,20 @@ class VNCA(Model):
             writer.add_images("samples/samples", samples, self.batch_idx)
             writer.add_images("samples/means", samples_means, self.batch_idx)
 
-            # Growths
-            growth_samples = []
-            growth_means = []
-            for state in states:
-                growth_sample, growth_mean = self.to_rgb(state[0:1])
-                growth_samples.append(growth_sample)
-                growth_means.append(growth_mean)
+            def plot_growth(states, tag):
+                growth_samples = []
+                growth_means = []
+                for state in states:
+                    growth_sample, growth_mean = self.to_rgb(state[0:1])
+                    growth_samples.append(growth_sample)
+                    growth_means.append(growth_mean)
 
-            growth_samples = t.cat(growth_samples, dim=0).cpu().detach().numpy()  # (n_states, 3, h, w)
-            growth_means = t.cat(growth_means, dim=0).cpu().detach().numpy()  # (n_states, 3, h, w)
-            writer.add_images("growth/samples", growth_samples, self.batch_idx)
-            writer.add_images("growth/means", growth_means, self.batch_idx)
+                growth_samples = t.cat(growth_samples, dim=0).cpu().detach().numpy()  # (n_states, 3, h, w)
+                growth_means = t.cat(growth_means, dim=0).cpu().detach().numpy()  # (n_states, 3, h, w)
+                writer.add_images(tag + "/samples", growth_samples, self.batch_idx)
+                writer.add_images(tag + "/means", growth_means, self.batch_idx)
+
+            plot_growth(states, "growth")
 
             # Damage
             state = states[-1]
@@ -219,6 +221,8 @@ class VNCA(Model):
             recovered = self.nca(dmg)
             _, recovered_means = self.to_rgb(recovered[-1])
             writer.add_images("dmg/3-post", recovered_means, self.batch_idx)
+
+            plot_growth(recovered, "recovery")
 
             # Reconstructions
             recons_samples, recons_means = self.to_rgb(recon_states[-1].detach())
