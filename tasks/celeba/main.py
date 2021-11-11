@@ -21,7 +21,6 @@ if __name__ == "__main__":
     n_channels = 3
 
 
-
     def state_to_dist(state):
         return DiscretizedMixtureLogitsDistribution(n_mixtures, state[:, :n_mixtures * 10, :, :])
 
@@ -38,6 +37,10 @@ if __name__ == "__main__":
 
     update_net = nn.Sequential(
         nn.Conv2d(z_size, nca_hid, 3, padding=1),
+        nn.ELU(),
+        nn.Conv2d(nca_hid, nca_hid, 1),
+        nn.ELU(),
+        nn.Conv2d(nca_hid, nca_hid, 1),
         nn.ELU(),
         nn.Conv2d(nca_hid, z_size, 1, bias=False)
     )
