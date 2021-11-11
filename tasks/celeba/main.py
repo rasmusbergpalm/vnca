@@ -1,6 +1,7 @@
 import os
 
 from torch import nn
+from torch.utils.checkpoint import checkpoint_sequential
 from torchvision import transforms, datasets
 
 from modules.dml import DiscretizedMixtureLogitsDistribution
@@ -26,7 +27,7 @@ if __name__ == "__main__":
         return DiscretizedMixtureLogitsDistribution(n_mixtures, state[:, :n_mixtures * 10, :, :])
 
 
-    encoder = nn.Sequential(
+    encoder = checkpoint_sequential(nn.Sequential(
         nn.Conv2d(n_channels, encoder_hid * 2 ** 0, filter_size, padding=pad), nn.ELU(),  # (bs, 32, h, w)
         nn.Conv2d(encoder_hid * 2 ** 0, encoder_hid * 2 ** 1, filter_size, padding=pad, stride=2), nn.ELU(),  # (bs, 64, h//2, w//2)
         nn.Conv2d(encoder_hid * 2 ** 1, encoder_hid * 2 ** 2, filter_size, padding=pad, stride=2), nn.ELU(),  # (bs, 128, h//4, w//4)
@@ -34,7 +35,7 @@ if __name__ == "__main__":
         nn.Conv2d(encoder_hid * 2 ** 3, encoder_hid * 2 ** 4, filter_size, padding=pad, stride=2), nn.ELU(),  # (bs, 512, h//16, w//16),
         nn.Flatten(),  # (bs, 512*h//16*w//16)
         nn.Linear(encoder_hid * (2 ** 4) * h // 16 * w // 16, 2 * z_size),
-    )
+    ), 2)
 
     update_net = nn.Sequential(
         nn.Conv2d(z_size, nca_hid, 3, padding=1),
