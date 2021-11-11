@@ -14,33 +14,31 @@ class NCA(t.nn.Module):
         self.update_net = update_net
         self.p_update = p_update
 
-    def step(self, state, rand_update_mask):
-        # pre_alive_mask = self.alive_mask(state)
+    def step(self, state):
+        rand_update_mask = (t.rand((state.shape[0], 1, state.shape[2], state.shape[3]), device=self.device) < self.p_update).to(t.float32)
 
         update = self.update_net(state)
         state = (state + update * rand_update_mask)
 
-        # post_alive_mask = self.alive_mask(state)
-        state = state  # * (post_alive_mask * pre_alive_mask)
-
         return state
 
-    """
-    def alive_mask(self, state):
-        x = max_pool2d(state[:, 0:1], kernel_size=(3, 3), stride=1, padding=1)
-        hard = (t.sigmoid(x - 6.0) > 0.1).to(t.float32)
-        soft = x  # t.sigmoid(x - 6.0 - t.logit(t.tensor(0.1)))
-        out = hard + soft - soft.detach()
+    def _multi_step(self, state, n_steps):
+        states = [state]
+        for _ in range(n_steps):
+            states.append(self.step(states[-1]))
 
-        return out
-    """
+        return states[1:]
 
     def forward(self, state):
-        states = [state]
+        n_steps = random.randint(self.min_steps, self.max_steps)
+        multi_step_size = 8
+        n_multi_steps, remainder_steps = n_steps // multi_step_size, n_steps % multi_step_size
 
-        for j in range(random.randint(self.min_steps, self.max_steps)):
-            rand_update_mask = (t.rand((state.shape[0], 1, state.shape[2], state.shape[3]), device=self.device) < self.p_update).to(t.float32)
-            state = checkpoint(self.step, state, rand_update_mask)
-            states.append(state)
+        states = [state]
+        for j in range(n_multi_steps):
+            states += checkpoint(self._multi_step, state, multi_step_size)
+
+        if remainder_steps > 0:
+            states += checkpoint(self._multi_step, state, remainder_steps)
 
         return states
