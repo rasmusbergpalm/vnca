@@ -1,6 +1,10 @@
 import os
 
 from torch import nn
+from torch.autograd.profiler import EventList
+from torch.profiler import profile
+from torch.profiler import profile, record_function, ProfilerActivity
+
 from torchvision import transforms, datasets
 
 from modules.dml import DiscretizedMixtureLogitsDistribution
@@ -19,7 +23,6 @@ if __name__ == "__main__":
     encoder_hid = 32
     h = w = 64
     n_channels = 3
-
 
 
     def state_to_dist(state):
@@ -48,6 +51,16 @@ if __name__ == "__main__":
     train_data, val_data, test_data = [datasets.CelebA(data_dir, split=split, download=True, transform=tp) for split in ["train", "valid", "test"]]
 
     vnca = VNCA(h, w, n_channels, z_size, encoder, update_net, train_data, val_data, test_data, state_to_dist, batch_size, dmg_size)
-    vnca.eval_batch()
-    train(vnca, n_updates=100_000, eval_interval=100)
-    vnca.test(128)
+
+    with profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA], profile_memory=True, record_shapes=True) as prof:
+        for i in range(10):
+            vnca.train_batch()
+
+        averages: EventList = prof.key_averages()
+        prof.export_chrome_trace("trace.json")
+        print(averages.table(sort_by="self_cpu_memory_usage", row_limit=100))
+        print(averages.table(sort_by="cuda_time_total", row_limit=100))
+
+    # vnca.eval_batch()
+    # train(vnca, n_updates=100_000, eval_interval=100)
+    # vnca.test(128)
