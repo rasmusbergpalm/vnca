@@ -8,7 +8,6 @@ import tqdm
 from shapeguard import ShapeGuard
 from torch import optim
 from torch.distributions import Normal, Distribution
-from torch.utils.checkpoint import checkpoint
 from torch.utils.data import DataLoader, Dataset
 from torch.utils.tensorboard import SummaryWriter
 
