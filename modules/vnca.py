@@ -216,7 +216,7 @@ class VNCA(Model):
             dmg = self.damage(state)
             _, dmg_means = self.to_rgb(dmg)
             writer.add_images("dmg/2-dmg", dmg_means, self.batch_idx)
-            recovered = self.nca(state)
+            recovered = self.nca(dmg)
             _, recovered_means = self.to_rgb(recovered[-1])
             writer.add_images("dmg/3-post", recovered_means, self.batch_idx)
 
@@ -232,3 +232,5 @@ class VNCA(Model):
                 pool_samples, pool_means = self.to_rgb(pool_states)
                 writer.add_images("pool/samples", pool_samples, self.batch_idx)
                 writer.add_images("pool/means", pool_means, self.batch_idx)
+
+        writer.flush()
