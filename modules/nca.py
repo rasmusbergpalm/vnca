@@ -36,9 +36,9 @@ class NCA(t.nn.Module):
 
         states = [state]
         for j in range(n_multi_steps):
-            states += checkpoint(self._multi_step, state, multi_step_size)
+            states += checkpoint(self._multi_step, states[-1], multi_step_size)
 
         if remainder_steps > 0:
-            states += checkpoint(self._multi_step, state, remainder_steps)
+            states += checkpoint(self._multi_step, states[-1], remainder_steps)
 
         return states
