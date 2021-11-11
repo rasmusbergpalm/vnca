@@ -110,7 +110,7 @@ class VNCA(Model):
 
     def encode(self, x) -> Distribution:  # q(z|x)
         x.sg("Bchw")
-        q = checkpoint(self.encoder, x).sg("BZ")
+        q = self.encoder(x).sg("BZ")
         loc = q[:, :self.z_size].sg("Bz")
         logsigma = q[:, self.z_size:].sg("Bz")
         return Normal(loc=loc, scale=t.exp(logsigma))
