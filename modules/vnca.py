@@ -190,7 +190,7 @@ class VNCA(Model):
         ShapeGuard.reset()
         with t.no_grad():
             # samples
-            samples = self.p_z.sample((64,)).view(64, -1, 1, 1).expand(64, -1, self.h, self.w).to(self.device)
+            samples = self.p_z.sample((8,)).view(8, -1, 1, 1).expand(8, -1, self.h, self.w).to(self.device)
             states = self.decode(samples)
             samples, samples_means = self.to_rgb(states[-1])
             writer.add_images("samples/samples", samples, self.batch_idx)
