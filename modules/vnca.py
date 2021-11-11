@@ -136,7 +136,7 @@ class VNCA(Model):
         bs = x.shape[0]
         n_pool_samples = bs // 2
         pool_states = None
-        if self.training and len(self.pool) > n_pool_samples:
+        if self.training and 0 < n_pool_samples < len(self.pool):
             # pop n_pool_samples worst in the pool
             pool_samples = self.pool[:n_pool_samples]
             self.pool = self.pool[n_pool_samples:]
