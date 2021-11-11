@@ -34,7 +34,7 @@ class NCA(t.nn.Module):
         multi_step_size = 8
         n_multi_steps, remainder_steps = n_steps // multi_step_size, n_steps % multi_step_size
 
-        states = [state]
+        states = (state,)
         for j in range(n_multi_steps):
             states = states + checkpoint(self._multi_step, states[-1], multi_step_size)
 
