@@ -23,7 +23,7 @@ class DiscretizedMixtureLogitsDistribution(Distribution):
         """
         Returns the mean of the distribution.
         """
-        return self.sample()  # TODO
+        return t.stack([self.sample() for _ in range(1000)], dim=0).mean(dim=0)
 
 
 class DiscretizedMixtureLogits():
