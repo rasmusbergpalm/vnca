@@ -15,10 +15,10 @@ class NCA(t.nn.Module):
         self.p_update = p_update
 
     def step(self, state):
-        rand_update_mask = (t.rand((state.shape[0], 1, state.shape[2], state.shape[3]), device=self.device) < self.p_update).to(t.float32)
+        #rand_update_mask = (t.rand((state.shape[0], 1, state.shape[2], state.shape[3]), device=self.device) < self.p_update).to(t.float32)
 
         update = self.update_net(state)
-        state = (state + update * rand_update_mask)
+        state = (state + update * 1)
 
         return state
 
