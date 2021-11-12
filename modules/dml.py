@@ -23,7 +23,7 @@ class DiscretizedMixtureLogitsDistribution(Distribution):
         """
         Returns the mean of the distribution.
         """
-        return torch.stack([self.sample() for _ in range(1000)], dim=0).mean(dim=0)
+        return self.sample()  # TODO
 
 
 class DiscretizedMixtureLogits():

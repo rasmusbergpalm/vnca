@@ -12,13 +12,13 @@ if __name__ == "__main__":
     z_size = 128
     nca_hid = 128
     n_mixtures = 1
-    batch_size = 32
+    batch_size = 128
     dmg_size = 32
 
     filter_size = 5
     pad = filter_size // 2
     encoder_hid = 32
-    h = w = 64
+    h = w = 32
     n_channels = 3
 
 
