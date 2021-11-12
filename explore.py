@@ -1,9 +1,13 @@
 import os
+from typing import Tuple
 
+import imageio
+import numpy as np
 import matplotlib.pyplot as plt
 import torch as t
 import torch.nn as nn
 from torch.utils.data import ConcatDataset
+from sklearn.manifold import TSNE
 
 from modules.vnca import VNCA
 from tasks.mnist.main import state_to_dist
@@ -27,7 +31,15 @@ class LinearInterpolation:
         return self.interpolate(z, z_prime)
 
 
-def load_model() -> VNCA:
+def get_binarized_MNIST_with_labels() -> Tuple[t.Tensor]:
+    ims, labels = np.split(
+        imageio.imread("https://i.imgur.com/j0SOfRW.png")[..., :3].ravel(), [-70000]
+    )
+    ims = np.unpackbits(ims).reshape((-1, 28, 28))
+    return t.from_numpy(ims).type(t.float), t.from_numpy(labels)
+
+
+def load_model(w_data: bool = False) -> VNCA:
     z_size = 128
     nca_hid = 128
     batch_size = 128
@@ -85,6 +97,17 @@ def load_model() -> VNCA:
     )
     update_net[-1].weight.data.fill_(0.0)
 
+    if w_data:
+        data_dir = os.environ.get("DATA_DIR") or "data"
+        train_data, val_data, test_data = (
+            StaticMNIST(data_dir, "train"),
+            StaticMNIST(data_dir, "val"),
+            StaticMNIST(data_dir, "test"),
+        )
+        train_data = ConcatDataset((train_data, val_data))
+    else:
+        train_data = val_data = test_data = None
+
     vnca = VNCA(
         h,
         w,
@@ -92,9 +115,9 @@ def load_model() -> VNCA:
         z_size,
         encoder,
         update_net,
-        "hi",
-        "hello",
-        "hopefully this doesn't break",
+        train_data,
+        test_data,
+        test_data,
         state_to_dist,
         batch_size,
         dmg_size,
@@ -103,10 +126,6 @@ def load_model() -> VNCA:
     vnca.load("latest")
 
     return vnca
-
-
-def load_model_with_data():
-    pass
 
 
 def get_imgs(z: t.Tensor, vnca: VNCA):
@@ -122,19 +141,71 @@ def get_imgs(z: t.Tensor, vnca: VNCA):
     return samples_imgs, p_imgs
 
 
-vnca = load_model()
-l = LinearInterpolation(25)
-zs = l.random_interpolation(128)
+def plot_random_interpolation():
+    vnca = load_model()
+    l = LinearInterpolation(25)
+    zs = l.random_interpolation(128)
 
-_, axes = plt.subplots(5, 5)
-axes = axes.flatten()
+    _, axes = plt.subplots(5, 5)
+    axes = axes.flatten()
 
-_, imgs = get_imgs(zs, vnca)
+    _, imgs = get_imgs(zs, vnca)
 
-for img, ax in zip(imgs, axes):
-    ax.imshow(img[0])
+    for img, ax in zip(imgs, axes):
+        ax.imshow(img[0])
+        ax.axis("off")
+
+    plt.tight_layout()
+    plt.show()
+    plt.close()
+
+
+def plot_interpolation_0_1():
+    imgs, labels = get_binarized_MNIST_with_labels()
+    ones_ = imgs[labels == 1]
+    zeros_ = imgs[labels == 0]
+    vnca = load_model()
+
+    zs_ones = vnca.encode(ones_.unsqueeze(1)[:100]).mean
+    zs_zeros = vnca.encode(zeros_.unsqueeze(1)[:100]).mean
+
+    l = LinearInterpolation(25)
+    zs = l.interpolate(zs_ones[0], zs_zeros[0])
+    _, axes = plt.subplots(5, 5, figsize=(5 * 5, 5 * 5))
+    axes = axes.flatten()
+
+    _, imgs = get_imgs(zs, vnca)
+    imgs = imgs.detach().numpy()
+
+    for img, ax in zip(imgs, axes):
+        ax.imshow(img[0])
+        ax.axis("off")
+
+    plt.tight_layout()
+    plt.show()
+    plt.close()
+
+
+def plot_clustering():
+    imgs, labels = get_binarized_MNIST_with_labels()
+    n = 5000
+    vnca = load_model()
+    encodings = vnca.encode(imgs[:n].unsqueeze(1)).mean.detach().numpy()
+    tsne = TSNE(n_components=2)
+    low_dim = tsne.fit_transform(encodings)
+    _, ax = plt.subplots(1, 1)
+    plot = ax.scatter(
+        low_dim[:, 0],
+        low_dim[:, 1],
+        c=labels[:n].detach().numpy(),
+        cmap="tab10",
+        s=10,
+        alpha=0.7,
+    )
+    plt.colorbar(plot, ax=ax, fraction=0.046, pad=0.04)
     ax.axis("off")
+    raise
 
-plt.tight_layout()
-plt.show()
-plt.close()
+
+if __name__ == "__main__":
+    plot_clustering()
