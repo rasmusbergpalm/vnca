@@ -17,7 +17,7 @@ if __name__ == "__main__":
 
     filter_size = 5
     pad = filter_size // 2
-    encoder_hid = 32
+    encoder_hid = 128
     h = w = 32
     n_channels = 3
 
@@ -27,13 +27,13 @@ if __name__ == "__main__":
 
 
     encoder = nn.Sequential(
-        nn.Conv2d(n_channels, encoder_hid * 2 ** 0, filter_size, padding=pad), nn.ELU(),  # (bs, 32, h, w)
-        nn.Conv2d(encoder_hid * 2 ** 0, encoder_hid * 2 ** 1, filter_size, padding=pad, stride=2), nn.ELU(),  # (bs, 64, h//2, w//2)
-        nn.Conv2d(encoder_hid * 2 ** 1, encoder_hid * 2 ** 2, filter_size, padding=pad, stride=2), nn.ELU(),  # (bs, 128, h//4, w//4)
-        nn.Conv2d(encoder_hid * 2 ** 2, encoder_hid * 2 ** 3, filter_size, padding=pad, stride=2), nn.ELU(),  # (bs, 256, h//8, w//8)
-        nn.Conv2d(encoder_hid * 2 ** 3, encoder_hid * 2 ** 4, filter_size, padding=pad, stride=2), nn.ELU(),  # (bs, 512, h//16, w//16),
-        nn.Flatten(),  # (bs, 512*h//16*w//16)
-        nn.Linear(encoder_hid * (2 ** 4) * h // 16 * w // 16, 2 * z_size),
+        nn.Conv2d(n_channels, encoder_hid, filter_size, padding=pad, stride=2), nn.ELU(),  # (bs, 64, h, w)
+        nn.Conv2d(encoder_hid, encoder_hid, filter_size, padding=pad, stride=2), nn.ELU(),  # (bs, 64, h//2, w//2)
+        nn.Conv2d(encoder_hid, encoder_hid, filter_size, padding=pad, stride=2), nn.ELU(),  # (bs, 64, h//8, w//8)
+        nn.Conv2d(encoder_hid, encoder_hid, filter_size, padding=pad, stride=2), nn.ELU(),  # (bs, 64, h//16, w//16),
+        nn.Flatten(),  # (bs, 128*h//16*w//16)
+        nn.Linear(encoder_hid * h // 16 * w // 16, encoder_hid), nn.ELU(),
+        nn.Linear(encoder_hid, 2 * z_size),
     )
 
     update_net = nn.Sequential(
