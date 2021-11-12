@@ -10,6 +10,7 @@ from torch.utils.data import ConcatDataset
 from sklearn.manifold import TSNE
 
 from modules.vnca import VNCA
+from baseline import VAE
 from tasks.mnist.main import state_to_dist
 from tasks.mnist.data import StaticMNIST
 
@@ -123,9 +124,16 @@ def load_model(w_data: bool = False) -> VNCA:
         dmg_size,
     )
     print("loading the weights")
-    vnca.load("latest")
+    vnca.load("latest_vnca")
 
     return vnca
+
+
+def load_baseline() -> VAE:
+    vae = VAE(128, 64)
+    vae.load("latest")
+
+    return vae
 
 
 def get_imgs(z: t.Tensor, vnca: VNCA):
@@ -135,10 +143,16 @@ def get_imgs(z: t.Tensor, vnca: VNCA):
         .unsqueeze(3)
         .expand(-1, -1, vnca.h, vnca.w)
     )
-    f_states = vnca.decode(seeds)[-1]
+    states = vnca.decode(seeds)
+    # f_states = t.cat(f_states)
+    samples_at_time_t = []
+    p_at_time_t = []
+    for state in states:
+        samples_imgs, p_imgs = vnca.to_rgb(state)
+        samples_at_time_t.append(samples_imgs)
+        p_at_time_t.append(p_imgs)
 
-    samples_imgs, p_imgs = vnca.to_rgb(f_states)
-    return samples_imgs, p_imgs
+    return samples_at_time_t, p_at_time_t
 
 
 def plot_random_interpolation():
@@ -150,6 +164,7 @@ def plot_random_interpolation():
     axes = axes.flatten()
 
     _, imgs = get_imgs(zs, vnca)
+    imgs = imgs[-1]
 
     for img, ax in zip(imgs, axes):
         ax.imshow(img[0])
@@ -166,6 +181,8 @@ def plot_interpolation_0_1():
     zeros_ = imgs[labels == 0]
     vnca = load_model()
 
+    # TODO: implement the interpolation using the baseline model.
+
     zs_ones = vnca.encode(ones_.unsqueeze(1)[:100]).mean
     zs_zeros = vnca.encode(zeros_.unsqueeze(1)[:100]).mean
 
@@ -175,6 +192,7 @@ def plot_interpolation_0_1():
     axes = axes.flatten()
 
     _, imgs = get_imgs(zs, vnca)
+    imgs = imgs[-1]
     imgs = imgs.detach().numpy()
 
     for img, ax in zip(imgs, axes):
@@ -182,7 +200,8 @@ def plot_interpolation_0_1():
         ax.axis("off")
 
     plt.tight_layout()
-    plt.show()
+    plt.savefig("./data/plots/interpolation.png", dpi=100)
+    # plt.show()
     plt.close()
 
 
@@ -208,4 +227,5 @@ def plot_clustering():
 
 
 if __name__ == "__main__":
-    plot_clustering()
+    # plot_clustering()
+    plot_interpolation_0_1()
