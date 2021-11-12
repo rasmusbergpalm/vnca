@@ -9,10 +9,10 @@ from modules.vnca import VNCA
 from train import train
 
 if __name__ == "__main__":
-    z_size = 128
+    z_size = 256
     nca_hid = 256
     n_mixtures = 1
-    batch_size = 128
+    batch_size = 32
     dmg_size = 16
 
     filter_size = 5
