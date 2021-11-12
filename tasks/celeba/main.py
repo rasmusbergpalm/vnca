@@ -13,7 +13,7 @@ if __name__ == "__main__":
     nca_hid = 128
     n_mixtures = 1
     batch_size = 128
-    dmg_size = 32
+    dmg_size = 16
 
     filter_size = 5
     pad = filter_size // 2
