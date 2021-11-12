@@ -1,7 +1,6 @@
 import os
 
 from torch import nn
-from torch.nn import DataParallel
 from torchvision import transforms, datasets
 
 from modules.dml import DiscretizedMixtureLogitsDistribution
@@ -9,17 +8,18 @@ from modules.vnca import VNCA
 from train import train
 
 if __name__ == "__main__":
-    z_size = 256
-    nca_hid = 256
+    z_size = 128
+    nca_hid = 128
     n_mixtures = 1
     batch_size = 32
-    dmg_size = 16
+    dmg_size = 32
 
     filter_size = 5
     pad = filter_size // 2
     encoder_hid = 32
-    h = w = 32
+    h = w = 64
     n_channels = 3
+
 
 
     def state_to_dist(state):
@@ -39,16 +39,9 @@ if __name__ == "__main__":
     update_net = nn.Sequential(
         nn.Conv2d(z_size, nca_hid, 3, padding=1),
         nn.ELU(),
-        nn.Conv2d(nca_hid, nca_hid, 1),
-        nn.ELU(),
-        nn.Conv2d(nca_hid, nca_hid, 1),
-        nn.ELU(),
         nn.Conv2d(nca_hid, z_size, 1, bias=False)
     )
     update_net[-1].weight.data.fill_(0.0)
-
-    # encoder = DataParallel(encoder)
-    # update_net = DataParallel(update_net)
 
     data_dir = os.environ.get('DATA_DIR') or "data"
     tp = transforms.Compose([transforms.Resize((h, w)), transforms.ToTensor()])
