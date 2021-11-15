@@ -5,6 +5,7 @@ from torch.nn import DataParallel
 from torchvision import transforms, datasets
 
 from modules.dml import DiscretizedMixtureLogitsDistribution
+from modules.residual import Residual
 from modules.vnca import VNCA
 from train import train
 
@@ -12,7 +13,7 @@ if __name__ == "__main__":
     z_size = 256
     nca_hid = 128
     n_mixtures = 1
-    batch_size = 128
+    batch_size = 32
     dmg_size = 16
     p_update = 1.0
 
@@ -39,14 +40,30 @@ if __name__ == "__main__":
 
     update_net = nn.Sequential(
         nn.Conv2d(z_size, nca_hid, 3, padding=1),
-        nn.ELU(),
-        nn.Conv2d(nca_hid, nca_hid, 1),
-        nn.ELU(),
-        nn.Conv2d(nca_hid, nca_hid, 1),
-        nn.ELU(),
-        nn.Conv2d(nca_hid, z_size, 1, bias=False)
+        Residual(
+            nn.Conv2d(nca_hid, nca_hid, 1),
+            nn.ELU(),
+            nn.Conv2d(nca_hid, nca_hid, 1),
+        ),
+        Residual(
+            nn.Conv2d(nca_hid, nca_hid, 1),
+            nn.ELU(),
+            nn.Conv2d(nca_hid, nca_hid, 1),
+        ),
+        Residual(
+            nn.Conv2d(nca_hid, nca_hid, 1),
+            nn.ELU(),
+            nn.Conv2d(nca_hid, nca_hid, 1),
+        ),
+        Residual(
+            nn.Conv2d(nca_hid, nca_hid, 1),
+            nn.ELU(),
+            nn.Conv2d(nca_hid, nca_hid, 1),
+        ),
+        nn.Conv2d(nca_hid, z_size, 1)
     )
     update_net[-1].weight.data.fill_(0.0)
+    update_net[-1].bias.data.fill_(0.0)
 
     # encoder = DataParallel(encoder)
     # update_net = DataParallel(update_net)
