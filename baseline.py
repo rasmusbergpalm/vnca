@@ -23,7 +23,8 @@ def get_binarized_MNIST_with_labels() -> Tuple[t.Tensor]:
 class VAE(Model):
     def __init__(self, z_dim: int, batch_size: int):
         super().__init__()
-        self.z_dim = z_dim
+        self.device = "cuda" if t.cuda.is_available() else "cpu"
+        self.z_dim = self.z_size = z_dim
 
         self.encoder = t.nn.Sequential(
             t.nn.Linear(28 * 28, 512),

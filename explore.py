@@ -8,6 +8,7 @@ import torch as t
 import torch.nn as nn
 from torch.utils.data import ConcatDataset
 from sklearn.manifold import TSNE
+from shapeguard import ShapeGuard
 
 from modules.vnca import VNCA
 from baseline import VAE
@@ -175,57 +176,84 @@ def plot_random_interpolation():
     plt.close()
 
 
-def plot_interpolation_0_1():
+def plot_interpolation_0_1(model, name="vnca"):
+    ShapeGuard.reset()
     imgs, labels = get_binarized_MNIST_with_labels()
     ones_ = imgs[labels == 1]
     zeros_ = imgs[labels == 0]
-    vnca = load_model()
+    # vnca = load_model()
 
     # TODO: implement the interpolation using the baseline model.
 
-    zs_ones = vnca.encode(ones_.unsqueeze(1)[:100]).mean
-    zs_zeros = vnca.encode(zeros_.unsqueeze(1)[:100]).mean
+    zs_ones = model.encode(ones_.unsqueeze(1)[:100]).mean
+    zs_zeros = model.encode(zeros_.unsqueeze(1)[:100]).mean
 
     l = LinearInterpolation(25)
     zs = l.interpolate(zs_ones[0], zs_zeros[0])
     _, axes = plt.subplots(5, 5, figsize=(5 * 5, 5 * 5))
     axes = axes.flatten()
 
-    _, imgs = get_imgs(zs, vnca)
-    imgs = imgs[-1]
-    imgs = imgs.detach().numpy()
+    if name == "vnca":
+        _, imgs = get_imgs(zs, model)
+        imgs = imgs[-1]
+        imgs = imgs.detach().numpy()
+    else:
+        imgs = model.decode(zs).probs.detach().numpy()
 
     for img, ax in zip(imgs, axes):
-        ax.imshow(img[0])
+        if name == "vnca":
+            ax.imshow(img[0])
+        else:
+            ax.imshow(img)
         ax.axis("off")
 
+    plt.title(name)
     plt.tight_layout()
-    plt.savefig("./data/plots/interpolation.png", dpi=100)
+    plt.savefig(f"./data/plots/interpolation_{name}.png", dpi=100)
     # plt.show()
     plt.close()
 
 
-def plot_clustering():
+def plot_clustering(model, name="vnca", n=5000):
+    ShapeGuard.reset()
     imgs, labels = get_binarized_MNIST_with_labels()
-    n = 5000
-    vnca = load_model()
-    encodings = vnca.encode(imgs[:n].unsqueeze(1)).mean.detach().numpy()
+    labels = labels.detach().numpy()
+    # n = 5000
+    # vnca = load_model()
+    encodings = model.encode(imgs[:n].unsqueeze(1)).mean.detach().numpy()
     tsne = TSNE(n_components=2)
     low_dim = tsne.fit_transform(encodings)
     _, ax = plt.subplots(1, 1)
     plot = ax.scatter(
         low_dim[:, 0],
         low_dim[:, 1],
-        c=labels[:n].detach().numpy(),
+        c=labels[:n],
         cmap="tab10",
         s=10,
         alpha=0.7,
+        vmin=np.min(labels) - 0.5,
+        vmax=np.max(labels) + 0.5,
     )
-    plt.colorbar(plot, ax=ax, fraction=0.046, pad=0.04)
+    plt.colorbar(
+        plot,
+        ax=ax,
+        ticks=np.arange(np.min(labels), np.max(labels) + 1),
+        fraction=0.046,
+        pad=0.04,
+    )
     ax.axis("off")
-    raise
+    plt.title(name)
+    plt.savefig(f"./data/plots/clustering_{name}.png")
+    plt.close()
+    # raise
 
 
 if __name__ == "__main__":
-    # plot_clustering()
-    plot_interpolation_0_1()
+    model = load_model()
+    baseline = load_baseline()
+
+    plot_clustering(model, name="vnca")
+    plot_clustering(baseline, name="baseline")
+
+    plot_interpolation_0_1(model, name="vnca")
+    plot_interpolation_0_1(baseline, name="baseline")
