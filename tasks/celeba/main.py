@@ -16,6 +16,7 @@ if __name__ == "__main__":
     batch_size = 32
     dmg_size = 16
     p_update = 1.0
+    min_steps, max_steps = 64, 128
 
     filter_size = 5
     pad = filter_size // 2
@@ -72,7 +73,7 @@ if __name__ == "__main__":
     tp = transforms.Compose([transforms.Resize((h, w)), transforms.ToTensor()])
     train_data, val_data, test_data = [datasets.CelebA(data_dir, split=split, download=True, transform=tp) for split in ["train", "valid", "test"]]
 
-    vnca = VNCA(h, w, n_channels, z_size, encoder, update_net, train_data, val_data, test_data, state_to_dist, batch_size, dmg_size, p_update)
+    vnca = VNCA(h, w, n_channels, z_size, encoder, update_net, train_data, val_data, test_data, state_to_dist, batch_size, dmg_size, p_update, min_steps, max_steps)
     vnca.eval_batch()
     train(vnca, n_updates=100_000, eval_interval=100)
     vnca.test(128)
