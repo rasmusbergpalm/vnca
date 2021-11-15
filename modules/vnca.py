@@ -33,7 +33,8 @@ class VNCA(Model):
                  test_data: Dataset,
                  states_to_dist,
                  batch_size: int,
-                 dmg_size: int
+                 dmg_size: int,
+                 p_update: float
                  ):
         super(Model, self).__init__()
         self.h = h
@@ -49,7 +50,7 @@ class VNCA(Model):
         self.dmg_size = dmg_size
 
         self.encoder = encoder
-        self.nca = NCA(update_net, 32, 64, 0.5)
+        self.nca = NCA(update_net, 32, 64, p_update)
         self.p_z = Normal(t.zeros(self.z_size, device=self.device), t.ones(self.z_size, device=self.device))
 
         self.test_set = test_data
