@@ -99,7 +99,7 @@ class VAENCA(Model, nn.Module):
             raise NotImplementedError()
         self.train_loader = iter(DataLoader(IterableWrapper(train_data), batch_size=batch_size, pin_memory=True))
         self.test_loader = iter(DataLoader(IterableWrapper(val_data), batch_size=batch_size, pin_memory=True))
-        self.train_writer, self.test_writer = get_writers("hierarchical-nca")
+        self.train_writer, self.test_writer = get_writers("vnca")
 
         print(self)
         for n, p in self.named_parameters():
