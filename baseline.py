@@ -7,10 +7,12 @@ import torch.nn as nn
 from torch import optim
 from torch.distributions import Normal, Bernoulli, kl_divergence
 from torch.utils.data import TensorDataset, DataLoader
+from torch.utils.tensorboard import SummaryWriter
 from shapeguard import ShapeGuard
 
 from modules.iterable_dataset_wrapper import IterableWrapper
 from modules.model import Model
+from util import get_writers
 from train import train
 
 
@@ -146,6 +148,8 @@ class VAE(Model):
             )
         )
 
+        self.train_writer, self.test_writer = get_writers("baseline")
+
         self.p_z = Normal(
             loc=t.zeros((z_dim), device=self.device),
             scale=t.ones((z_dim), device=self.device),
@@ -194,6 +198,7 @@ class VAE(Model):
             x, _ = next(self.val_loader)
             q_z_given_x, p_x_given_z = self.forward(x)
             loss = self.loss(x, q_z_given_x, p_x_given_z)
+            self.report(self.test_writer, loss)
 
         return loss.item()
 
@@ -208,10 +213,22 @@ class VAE(Model):
 
         self.optimizer.step()
 
+        if self.batch_idx % 100 == 0:
+            self.report(self.train_writer, loss)
+
         self.batch_idx += 1
         return loss
+
+    def report(self, writer: SummaryWriter, loss):
+        writer.add_scalar("loss", loss.mean().item(), self.batch_idx)
+        writer.add_scalar(
+            "bpd",
+            loss.mean().item() / (np.log(2) * self.n_channels * self.h * self.w),
+            self.batch_idx,
+        )
 
 
 if __name__ == "__main__":
     vae = VAE(128, 64)
+    vae.eval_batch()
     train(vae, n_updates=100_000, eval_interval=50)
