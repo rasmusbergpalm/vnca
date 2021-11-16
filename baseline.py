@@ -1,4 +1,6 @@
 from typing import Tuple
+import os
+
 
 import imageio
 import numpy as np
@@ -12,6 +14,8 @@ from shapeguard import ShapeGuard
 
 from modules.iterable_dataset_wrapper import IterableWrapper
 from modules.model import Model
+from tasks.mnist.data import StaticMNIST
+from torch.utils.data import ConcatDataset
 from util import get_writers
 from train import train
 
@@ -128,23 +132,31 @@ class VAE(Model):
             ),
         )
 
-        data, labels = get_binarized_MNIST_with_labels()
-        train_data = data[:50_000]
-        train_labels = labels[:50_000]
-        val_data = data[50_000:]
-        val_labels = labels[50_000:]
+        # data, labels = get_binarized_MNIST_with_labels()
+        # train_data = data[:batch_size]
+        # train_labels = labels[:batch_size]
+        # val_data = data[batch_size : 2 * batch_size]
+        # val_labels = labels[batch_size : 2 * batch_size]
 
-        train_dataset = TensorDataset(train_data, train_labels)
-        val_dataset = TensorDataset(val_data, val_labels)
+        # train_dataset = TensorDataset(train_data, train_labels)
+        # val_dataset = TensorDataset(val_data, val_labels)
+
+        data_dir = os.environ.get("DATA_DIR") or "data"
+        train_data, val_data, test_data = (
+            StaticMNIST(data_dir, "train"),
+            StaticMNIST(data_dir, "val"),
+            StaticMNIST(data_dir, "test"),
+        )
+        train_data = ConcatDataset((train_data, val_data))
 
         self.train_loader = iter(
             DataLoader(
-                IterableWrapper(train_dataset), batch_size=batch_size, pin_memory=True
+                IterableWrapper(train_data), batch_size=batch_size, pin_memory=True
             )
         )
         self.val_loader = iter(
             DataLoader(
-                IterableWrapper(val_dataset), batch_size=batch_size, pin_memory=True
+                IterableWrapper(test_data), batch_size=batch_size, pin_memory=True
             )
         )
 
@@ -176,9 +188,9 @@ class VAE(Model):
 
     def forward(self, x: t.Tensor):
         ShapeGuard.reset()
-        x.sg("bhw")
-        x = x.unsqueeze(1).sg("bchw")
-        q_z_given_x = self.encode(x)
+        # x.sg("bhw")
+        # x = x.unsqueeze(1).sg("bchw")
+        q_z_given_x = self.encode(x.sg("bchw"))
 
         z = q_z_given_x.rsample()
 
@@ -187,7 +199,9 @@ class VAE(Model):
         return q_z_given_x, p_x_given_z
 
     def loss(self, x, q_z_given_x, p_x_given_z):
-        rec_loss = -p_x_given_z.log_prob(x.to(self.device)).sum(dim=(1, 2))  # b
+        rec_loss = -p_x_given_z.log_prob(x.to(self.device).squeeze(1)).sum(
+            dim=(1, 2)
+        )  # b
         kld = kl_divergence(self.p_z, q_z_given_x).sum(dim=1)  # b
 
         return (rec_loss + kld).mean()
