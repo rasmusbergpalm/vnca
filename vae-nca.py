@@ -174,7 +174,7 @@ class VAENCA(Model, nn.Module):
         return samples, recons, growth
 
     def to_rgb(self, state):
-        return (DiscretizedMixtureLogitsDistribution(self.n_mixtures, state[:, :self.n_mixtures * 10, :, :]).sample() + 1) / 2
+        return t.stack([(DiscretizedMixtureLogitsDistribution(self.n_mixtures, state[:, :self.n_mixtures * 10, :, :]).sample() + 1) / 2 for _ in range(100)]).mean(dim=0)
 
     def plot_growth_samples(self):
         ShapeGuard.reset()
@@ -279,7 +279,7 @@ class VAENCA(Model, nn.Module):
 
         reconstruction_loss = -logpx_given_z.mean()
         kl_loss = kld.mean()
-        loss = reconstruction_loss + kl_loss
+        loss = reconstruction_loss + 100 * kl_loss
         return loss, reconstruction_loss, kl_loss  # (1,)
 
 
