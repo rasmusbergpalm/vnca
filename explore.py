@@ -132,7 +132,7 @@ def load_model(w_data: bool = False) -> VNCA:
 
 def load_baseline() -> VAE:
     vae = VAE(128, 64)
-    vae.load("latest")
+    vae.load("best")
 
     return vae
 

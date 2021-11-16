@@ -146,13 +146,16 @@ class VAE(Model):
             )
         )
 
-        self.p_z = Normal(loc=t.zeros((z_dim)), scale=t.ones((z_dim)))
+        self.p_z = Normal(
+            loc=t.zeros((z_dim), device=self.device),
+            scale=t.ones((z_dim), device=self.device),
+        )
         self.to(self.device)
         self.optimizer = optim.Adam(self.parameters(), lr=1e-4)
         self.batch_idx = 0
 
     def encode(self, x: t.Tensor) -> Normal:
-        mu_and_logsigma = self.encoder(x)
+        mu_and_logsigma = self.encoder(x.to(self.device))
         mu = mu_and_logsigma[:, : self.z_dim]
         logsigma = mu_and_logsigma[:, self.z_dim :]
 
@@ -160,7 +163,9 @@ class VAE(Model):
 
     def decode(self, z: t.Tensor) -> Bernoulli:
         b, _ = z.shape
-        res = self.decoder_linear(z).view(b, self.encoder_hid * (2 ** 4), 2, 2)
+        res = self.decoder_linear(z.to(self.device)).view(
+            b, self.encoder_hid * (2 ** 4), 2, 2
+        )
         logits = self.decoder(res)
 
         return Bernoulli(logits=logits.view(-1, 28, 28))
@@ -178,7 +183,7 @@ class VAE(Model):
         return q_z_given_x, p_x_given_z
 
     def loss(self, x, q_z_given_x, p_x_given_z):
-        rec_loss = -p_x_given_z.log_prob(x).sum(dim=(1, 2))  # b
+        rec_loss = -p_x_given_z.log_prob(x.to(self.device)).sum(dim=(1, 2))  # b
         kld = kl_divergence(self.p_z, q_z_given_x).sum(dim=1)  # b
 
         return (rec_loss + kld).mean()
