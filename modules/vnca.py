@@ -27,16 +27,13 @@ class VNCA(Model):
                  n_channels: int,
                  z_size: int,
                  encoder: t.nn.Module,
-                 update_net: t.nn.Module,
+                 nca: t.nn.Module,
                  train_data: Dataset,
                  val_data: Dataset,
                  test_data: Dataset,
                  states_to_dist,
                  batch_size: int,
-                 dmg_size: int,
-                 p_update: float,
-                 min_steps: int,
-                 max_steps: int
+                 dmg_size: int
                  ):
         super(Model, self).__init__()
         self.h = h
@@ -52,7 +49,7 @@ class VNCA(Model):
         self.dmg_size = dmg_size
 
         self.encoder = encoder
-        self.nca = NCA(update_net, min_steps, max_steps, p_update)
+        self.nca = nca
         self.p_z = Normal(t.zeros(self.z_size, device=self.device), t.ones(self.z_size, device=self.device))
 
         self.test_set = test_data
