@@ -1,6 +1,6 @@
 from typing import Tuple
+import random
 import os
-
 
 import imageio
 import numpy as np
@@ -29,7 +29,7 @@ def get_binarized_MNIST_with_labels() -> Tuple[t.Tensor]:
 
 
 class VAE(Model):
-    def __init__(self, z_dim: int, batch_size: int):
+    def __init__(self, z_dim: int, batch_size: int, do_damage: bool = False):
         super().__init__()
         self.device = "cuda" if t.cuda.is_available() else "cpu"
         self.z_dim = self.z_size = z_dim
@@ -43,6 +43,7 @@ class VAE(Model):
         self.w = w
         self.encoder_hid = encoder_hid
         self.n_channels = n_channels
+        self.do_damage = do_damage
 
         self.encoder = nn.Sequential(
             nn.Conv2d(n_channels, encoder_hid * 2 ** 0, filter_size, padding=pad + 2),
@@ -132,22 +133,28 @@ class VAE(Model):
             ),
         )
 
-        # data, labels = get_binarized_MNIST_with_labels()
-        # train_data = data[:batch_size]
-        # train_labels = labels[:batch_size]
-        # val_data = data[batch_size : 2 * batch_size]
-        # val_labels = labels[batch_size : 2 * batch_size]
+        self.deconv_positions = [
+            i
+            for i in range(len(self.decoder))
+            if isinstance(self.decoder[i], nn.ConvTranspose2d)
+        ]
 
-        # train_dataset = TensorDataset(train_data, train_labels)
-        # val_dataset = TensorDataset(val_data, val_labels)
+        data, labels = get_binarized_MNIST_with_labels()
+        train_data = data[:batch_size].unsqueeze(1)
+        train_labels = labels[:batch_size]
+        val_data = data[batch_size : 2 * batch_size].unsqueeze(1)
+        val_labels = labels[batch_size : 2 * batch_size]
 
-        data_dir = os.environ.get("DATA_DIR") or "data"
-        train_data, val_data, test_data = (
-            StaticMNIST(data_dir, "train"),
-            StaticMNIST(data_dir, "val"),
-            StaticMNIST(data_dir, "test"),
-        )
-        train_data = ConcatDataset((train_data, val_data))
+        train_data = TensorDataset(train_data, train_labels)
+        val_data = TensorDataset(val_data, val_labels)
+
+        # data_dir = os.environ.get("DATA_DIR") or "data"
+        # train_data, val_data, test_data = (
+        #     StaticMNIST(data_dir, "train"),
+        #     StaticMNIST(data_dir, "val"),
+        #     StaticMNIST(data_dir, "test"),
+        # )
+        # train_data = ConcatDataset((train_data, val_data))
 
         self.train_loader = iter(
             DataLoader(
@@ -156,7 +163,7 @@ class VAE(Model):
         )
         self.val_loader = iter(
             DataLoader(
-                IterableWrapper(test_data), batch_size=batch_size, pin_memory=True
+                IterableWrapper(val_data), batch_size=batch_size, pin_memory=True
             )
         )
 
@@ -170,6 +177,12 @@ class VAE(Model):
         self.optimizer = optim.Adam(self.parameters(), lr=1e-4)
         self.batch_idx = 0
 
+        print(self)
+        total = sum(p.numel() for p in self.parameters())
+        for n, p in self.named_parameters():
+            print(n, p.shape, p.numel(), "%.1f" % (p.numel() / total * 100))
+        print("Total: %d" % total)
+
     def encode(self, x: t.Tensor) -> Normal:
         mu_and_logsigma = self.encoder(x.to(self.device))
         mu = mu_and_logsigma[:, : self.z_dim]
@@ -177,19 +190,38 @@ class VAE(Model):
 
         return Normal(loc=mu, scale=t.exp(0.5 * logsigma))
 
-    def decode(self, z: t.Tensor) -> Bernoulli:
+    def decode(self, z: t.Tensor, dmg: bool = None) -> Bernoulli:
         b, _ = z.shape
         res = self.decoder_linear(z.to(self.device)).view(
             b, self.encoder_hid * (2 ** 4), 2, 2
         )
-        logits = self.decoder(res)
+        if dmg is None:
+            do_damage = self.do_damage
+        else:
+            do_damage = dmg
+
+        if do_damage:
+            random_pos = random.choice(self.deconv_positions)
+            res = self.decoder[:random_pos](res)
+            res = self.damage(res)
+            logits = self.decoder[random_pos:](res)
+        else:
+            logits = self.decoder(res)
 
         return Bernoulli(logits=logits.view(-1, 28, 28))
 
+    def damage(self, res: t.Tensor):
+        b, _, h, w = res.shape
+        dmg_size = min(h // 2, w // 2)
+        for i in range(b):
+            h1 = random.randint(0, h - dmg_size)
+            w1 = random.randint(0, w - dmg_size)
+            res[i, :, h1 : h1 + dmg_size, w1 : w1 + dmg_size] = 0.0  # random damage.
+
+        return res
+
     def forward(self, x: t.Tensor):
         ShapeGuard.reset()
-        # x.sg("bhw")
-        # x = x.unsqueeze(1).sg("bchw")
         q_z_given_x = self.encode(x.sg("bchw"))
 
         z = q_z_given_x.rsample()
@@ -234,6 +266,7 @@ class VAE(Model):
         return loss
 
     def report(self, writer: SummaryWriter, loss):
+        # Loss
         writer.add_scalar("loss", loss.mean().item(), self.batch_idx)
         writer.add_scalar(
             "bpd",
@@ -241,8 +274,31 @@ class VAE(Model):
             self.batch_idx,
         )
 
+        ShapeGuard.reset()
+        with t.no_grad():
+            # Samples
+            zs = self.p_z.sample((64,))
+            p_x_given_z = self.decode(zs, dmg=False)
+            samples = p_x_given_z.sample().unsqueeze(1)
+            samples_means = p_x_given_z.probs.unsqueeze(1)
+            writer.add_images("samples/samples", samples, self.batch_idx)
+            writer.add_images("samples/means", samples_means, self.batch_idx)
+
+            # Reconstructions
+            x, _ = next(self.val_loader)
+            _, p_x_given_z = self.forward(x)
+            recons_samples = p_x_given_z.sample().unsqueeze(1)
+            recons_means = p_x_given_z.probs.unsqueeze(1)
+
+            writer.add_images("recons/samples", recons_samples, self.batch_idx)
+            writer.add_images("recons/means", recons_means, self.batch_idx)
+
+            # Damage
+            # How do I visualize this?
+
 
 if __name__ == "__main__":
     vae = VAE(128, 64)
     vae.eval_batch()
     train(vae, n_updates=100_000, eval_interval=50)
+    raise

@@ -132,7 +132,7 @@ def load_model(w_data: bool = False) -> VNCA:
 
 def load_baseline() -> VAE:
     vae = VAE(128, 64)
-    vae.load("best")
+    vae.load("best_baseline")
 
     return vae
 
@@ -253,7 +253,7 @@ if __name__ == "__main__":
     baseline = load_baseline()
 
     plot_clustering(model, name="vnca")
-    plot_clustering(baseline, name="baseline")
+    plot_clustering(baseline, name="baseline_DC")
 
     plot_interpolation_0_1(model, name="vnca")
-    plot_interpolation_0_1(baseline, name="baseline")
+    plot_interpolation_0_1(baseline, name="baseline_DC")
