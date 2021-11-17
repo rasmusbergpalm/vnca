@@ -52,4 +52,4 @@ def elbo(x: t.Tensor, p_x_given_z: Distribution, q_z_given_x: Distribution, p_z:
     kl_loss = kld
 
     loss = reconstruction_loss + kl_loss
-    return loss, reconstruction_loss, kl_loss
+    return loss, reconstruction_loss.detach(), kl_loss.detach()
