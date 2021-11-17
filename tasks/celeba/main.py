@@ -14,7 +14,7 @@ if __name__ == "__main__":
     z_size = 256
     nca_hid = 128
     n_mixtures = 1
-    batch_size = 128
+    batch_size = 96
     dmg_size = 16
     p_update = 1.0
     min_steps, max_steps = 64, 128
@@ -76,10 +76,8 @@ if __name__ == "__main__":
     vnca = VNCA(h, w, n_channels, z_size, encoder, nca, train_data, val_data, test_data, state_to_dist, batch_size, dmg_size)
 
     vnca.load('../a17aafd/latest')
-    encoder = DataParallel(encoder)
-    nca = DataParallel(nca)
-    vnca.encoder = encoder
-    vnca.nca = nca
+    vnca.encoder = DataParallel(encoder)
+    vnca.nca = DataParallel(nca)
 
     vnca.eval_batch()
     train(vnca, n_updates=500_000, eval_interval=100)
