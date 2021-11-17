@@ -73,25 +73,29 @@ class VNCA(Model):
         self.optimizer.zero_grad()
         x, y = next(self.train_loader)
         loss, z, p_x_given_z, recon_loss, kl_loss, states = self.forward(x, 1, elbo)
+        dloss = loss.detach()
         loss.mean().backward()
+        del loss
 
         t.nn.utils.clip_grad_norm_(self.parameters(), 1.0, error_if_nonfinite=True)
 
         self.optimizer.step()
 
         if self.batch_idx % 100 == 0:
-            self.report(self.train_writer, states, loss, recon_loss, kl_loss)
+            self.report(self.train_writer, states, dloss, recon_loss, kl_loss)
 
         self.batch_idx += 1
-        return loss.mean().item()
+        return dloss.mean().item()
 
     def eval_batch(self):
         self.train(False)
         with t.no_grad():
             x, y = next(self.val_loader)
             loss, z, p_x_given_z, recon_loss, kl_loss, states = self.forward(x, 1, iwae)
-            self.report(self.test_writer, states, loss, recon_loss, kl_loss)
-        return loss.mean().item()
+            dloss = loss.detach()
+            del loss
+            self.report(self.test_writer, states, dloss, recon_loss, kl_loss)
+        return dloss.mean().item()
 
     def test(self, n_iw_samples):
         self.train(False)
@@ -175,7 +179,7 @@ class VNCA(Model):
             random.shuffle(self.pool)
             self.pool = self.pool[:self.pool_size]
 
-        return loss, z, p_x_given_z, recon_loss, kl_loss, states
+        return loss, z.detach(), p_x_given_z.detach(), recon_loss.detach(), kl_loss.detach(), [state.detach() for state in states]
 
     def report(self, writer: SummaryWriter, recon_states, loss, recon_loss, kl_loss):
         writer.add_scalar('loss', loss.mean().item(), self.batch_idx)
