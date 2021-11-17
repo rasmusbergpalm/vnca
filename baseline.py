@@ -298,7 +298,7 @@ class VAE(Model):
 
 
 if __name__ == "__main__":
-    vae = VAE(128, 64)
+    vae = VAE(128, 64, do_damage=True)
     vae.eval_batch()
     train(vae, n_updates=100_000, eval_interval=50)
     raise
