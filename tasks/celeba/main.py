@@ -13,7 +13,7 @@ if __name__ == "__main__":
     z_size = 256
     nca_hid = 128
     n_mixtures = 1
-    batch_size = 32
+    batch_size = 128
     dmg_size = 16
     p_update = 1.0
     min_steps, max_steps = 64, 128
@@ -66,8 +66,8 @@ if __name__ == "__main__":
     update_net[-1].weight.data.fill_(0.0)
     update_net[-1].bias.data.fill_(0.0)
 
-    # encoder = DataParallel(encoder)
-    # update_net = DataParallel(update_net)
+    encoder = DataParallel(encoder)
+    update_net = DataParallel(update_net)
 
     data_dir = os.environ.get('DATA_DIR') or "data"
     tp = transforms.Compose([transforms.Resize((h, w)), transforms.ToTensor()])
