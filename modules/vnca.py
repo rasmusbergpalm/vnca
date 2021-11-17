@@ -181,7 +181,7 @@ class VNCA(Model):
             random.shuffle(self.pool)
             self.pool = self.pool[:self.pool_size]
 
-        return loss, z.detach(), recon_loss, kl_loss, (state.detach() for state in states)
+        return loss, z.detach(), recon_loss, kl_loss, [state.detach() for state in states]
 
     def report(self, writer: SummaryWriter, recon_states, loss, recon_loss, kl_loss):
         writer.add_scalar('loss', loss.mean().item(), self.batch_idx)
