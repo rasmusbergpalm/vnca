@@ -201,7 +201,7 @@ class VAE(Model):
             do_damage = dmg
 
         if do_damage:
-            random_pos = random.choice(self.deconv_positions)
+            random_pos = random.choice(self.deconv_positions[:-1])
             res = self.decoder[:random_pos](res)
             res = self.damage(res)
             logits = self.decoder[random_pos:](res)
