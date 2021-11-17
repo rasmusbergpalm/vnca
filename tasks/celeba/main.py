@@ -5,6 +5,7 @@ from torch.nn import DataParallel
 from torchvision import transforms, datasets
 
 from modules.dml import DiscretizedMixtureLogitsDistribution
+from modules.nca import NCA
 from modules.residual import Residual
 from modules.vnca import VNCA
 from train import train
@@ -13,7 +14,7 @@ if __name__ == "__main__":
     z_size = 256
     nca_hid = 128
     n_mixtures = 1
-    batch_size = 32
+    batch_size = 128
     dmg_size = 16
     p_update = 1.0
 
@@ -65,14 +66,16 @@ if __name__ == "__main__":
     update_net[-1].weight.data.fill_(0.0)
     update_net[-1].bias.data.fill_(0.0)
 
-    # encoder = DataParallel(encoder)
-    # update_net = DataParallel(update_net)
+    nca = NCA(update_net, 32, 64, p_update)
 
     data_dir = os.environ.get('DATA_DIR') or "data"
     tp = transforms.Compose([transforms.Resize((h, w)), transforms.ToTensor()])
     train_data, val_data, test_data = [datasets.CelebA(data_dir, split=split, download=True, transform=tp) for split in ["train", "valid", "test"]]
 
-    vnca = VNCA(h, w, n_channels, z_size, encoder, update_net, train_data, val_data, test_data, state_to_dist, batch_size, dmg_size, p_update)
+    vnca = VNCA(h, w, n_channels, z_size, encoder, nca, train_data, val_data, test_data, state_to_dist, batch_size, dmg_size)
+    vnca.load("../ab47e67/latest")
+    vnca.encoder = DataParallel(encoder)
+    vnca.nca = DataParallel(nca)
     vnca.eval_batch()
     train(vnca, n_updates=100_000, eval_interval=100)
     vnca.test(128)
