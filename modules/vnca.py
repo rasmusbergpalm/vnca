@@ -98,7 +98,7 @@ class VNCA(Model):
         with t.no_grad():
             total_loss = 0.0
             for x, y in tqdm.tqdm(self.test_set):
-                loss, z, p_x_given_z, recon_loss, kl_loss, states = self.forward(x, n_iw_samples, iwae)
+                loss, z, p_x_given_z, recon_loss, kl_loss, states = self.forward(x.unsqueeze(0), n_iw_samples, iwae)
                 total_loss += loss.mean().item()
 
         print(total_loss / len(self.test_set))
