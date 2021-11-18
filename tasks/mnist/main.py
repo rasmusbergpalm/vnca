@@ -46,7 +46,7 @@ if __name__ == "__main__":
     train_data, val_data, test_data = StaticMNIST(data_dir, 'train'), StaticMNIST(data_dir, 'val'), StaticMNIST(data_dir, 'test')
     train_data = ConcatDataset((train_data, val_data))
 
-    vnca = VNCA(h, w, n_channels, z_size, encoder, update_net, train_data, test_data, test_data, state_to_dist, batch_size, dmg_size)
+    vnca = VNCA(h, w, n_channels, z_size, encoder, update_net, train_data, test_data, test_data, state_to_dist, batch_size, dmg_size, 1.0, 32, 64)
     vnca.eval_batch()
     train(vnca, n_updates=100_000, eval_interval=100)
     vnca.test(128)
