@@ -163,14 +163,9 @@ class VNCA(Model):
             seeds[-n_pool_samples:] = pool_states  # yes this is wrong and will mess up the gradient.
 
         states = self.decode(seeds)
-        losses = []
-        for state in states:
-            p_x_given_z = self.state_to_dist(state)
-            loss, recon_loss, kl_loss = loss_fn(x, p_x_given_z, q_z_given_x, self.p_z, z)
-            losses.append(loss)
+        p_x_given_z = self.state_to_dist(states[-1])
 
-        losses = t.stack(losses).sg((len(states), "B"))  # (steps, batch)
-        loss = losses.mean(dim=0).sg("B")  # (batch,)
+        loss, recon_loss, kl_loss = loss_fn(x, p_x_given_z, q_z_given_x, self.p_z, z)
 
         if self.training:
             # Add states to pool
