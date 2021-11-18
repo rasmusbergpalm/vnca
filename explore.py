@@ -130,9 +130,9 @@ def load_model(w_data: bool = False) -> VNCA:
     return vnca
 
 
-def load_baseline() -> VAE:
+def load_baseline(name: str = None) -> VAE:
     vae = VAE(128, 64)
-    vae.load("best_baseline")
+    vae.load(name or "best_baseline")
 
     return vae
 
