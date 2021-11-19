@@ -14,7 +14,6 @@ from shapeguard import ShapeGuard
 
 from iterable_dataset_wrapper import IterableWrapper
 from modules.model import Model
-
 from data.mnist import StaticMNIST
 from torch.utils.data import ConcatDataset
 from util import get_writers
@@ -29,14 +28,14 @@ def get_binarized_MNIST_with_labels() -> Tuple[t.Tensor]:
     return t.from_numpy(ims).type(t.float), t.from_numpy(labels)
 
 
-class VAE(Model, nn.Module):
+class VAE(Model):
     def __init__(self, z_dim: int = 256, batch_size: int = 32, do_damage: bool = False):
         super().__init__()
         self.device = "cuda" if t.cuda.is_available() else "cpu"
         self.z_dim = self.z_size = z_dim
 
-        filter_size = (5, 5)
-        pad = tuple(s // 2 for s in filter_size)
+        filter_size = 5
+        pad = filter_size // 2
         encoder_hid = 32
         h = w = 28
         n_channels = 1
@@ -47,49 +46,47 @@ class VAE(Model, nn.Module):
         self.do_damage = do_damage
 
         self.encoder = nn.Sequential(
-            nn.Conv2d(
-                n_channels, encoder_hid * 2 ** 0, filter_size, padding=pad[0] + 2
-            ),
+            nn.Conv2d(n_channels, encoder_hid * 2 ** 0, filter_size, padding=pad + 2),
             nn.ELU(),  # (bs, 32, h, w)
             nn.Conv2d(
-                self.encoder_hid * 2 ** 0,
-                self.encoder_hid * 2 ** 1,
+                encoder_hid * 2 ** 0,
+                encoder_hid * 2 ** 1,
                 filter_size,
                 padding=pad,
                 stride=2,
             ),
             nn.ELU(),  # (bs, 64, h//2, w//2)
             nn.Conv2d(
-                self.encoder_hid * 2 ** 1,
-                self.encoder_hid * 2 ** 2,
+                encoder_hid * 2 ** 1,
+                encoder_hid * 2 ** 2,
                 filter_size,
                 padding=pad,
                 stride=2,
             ),
             nn.ELU(),  # (bs, 128, h//4, w//4)
             nn.Conv2d(
-                self.encoder_hid * 2 ** 2,
-                self.encoder_hid * 2 ** 3,
+                encoder_hid * 2 ** 2,
+                encoder_hid * 2 ** 3,
                 filter_size,
                 padding=pad,
                 stride=2,
             ),
             nn.ELU(),  # (bs, 256, h//8, w//8)
             nn.Conv2d(
-                self.encoder_hid * 2 ** 3,
-                self.encoder_hid * 2 ** 4,
+                encoder_hid * 2 ** 3,
+                encoder_hid * 2 ** 4,
                 filter_size,
                 padding=pad,
                 stride=2,
             ),
             nn.ELU(),  # (bs, 512, h//16, w//16),
             nn.Flatten(),  # (bs, 512*h//16*w//16)
-            nn.Linear(self.encoder_hid * (2 ** 4) * 2 * 2, 2 * self.z_size),
-        ).to(self.device)
+            nn.Linear(encoder_hid * (2 ** 4) * 2 * 2, 2 * self.z_size),
+        )
 
         self.decoder_linear = nn.Sequential(
-            nn.Linear(self.z_size, self.encoder_hid * (2 ** 4) * 2 * 2)
-        ).to(self.device)
+            nn.Linear(self.z_size, encoder_hid * (2 ** 4) * 2 * 2)
+        )
         self.decoder = t.nn.Sequential(
             t.nn.ConvTranspose2d(
                 encoder_hid * 2 ** 4,  # (bs, 512, h//16, w//16)
@@ -131,10 +128,10 @@ class VAE(Model, nn.Module):
                 encoder_hid * 2 ** 0,
                 n_channels,
                 filter_size,
-                padding=pad[0] + 2,
+                padding=pad + 2,
                 # output_padding=1,
             ),
-        ).to(self.device)
+        )
 
         self.deconv_positions = [
             i
@@ -142,15 +139,14 @@ class VAE(Model, nn.Module):
             if isinstance(self.decoder[i], nn.ConvTranspose2d)
         ]
 
-        # For overfitting testing.
         # data, labels = get_binarized_MNIST_with_labels()
-        # train_data = data[:batch_size].unsqueeze(1).to(self.device)
-        # train_labels = labels[:batch_size].to(self.device)
-        # val_data = data[batch_size : 2 * batch_size].unsqueeze(1).to(self.device)
-        # val_labels = labels[batch_size : 2 * batch_size].to(self.device)
+        # train_data = data[:batch_size].unsqueeze(1)
+        # train_labels = labels[:batch_size]
+        # val_data = data[batch_size : 2 * batch_size].unsqueeze(1)
+        # val_labels = labels[batch_size : 2 * batch_size]
 
         # train_data = TensorDataset(train_data, train_labels)
-        # test_data = TensorDataset(val_data, val_labels)
+        # val_data = TensorDataset(val_data, val_labels)
 
         data_dir = os.environ.get("DATA_DIR") or "data"
         train_data, val_data, test_data = (
@@ -226,9 +222,7 @@ class VAE(Model, nn.Module):
 
     def forward(self, x: t.Tensor):
         ShapeGuard.reset()
-        # x_flat = x.reshape(x.shape[0], -1).sg("bx")
-
-        q_z_given_x = self.encode(x).sg("bz")
+        q_z_given_x = self.encode(x.sg("bchw"))
 
         z = q_z_given_x.rsample()
 
@@ -307,4 +301,4 @@ if __name__ == "__main__":
     vae = VAE()
     vae.eval_batch()
     train(vae, n_updates=100_000, eval_interval=50)
-    raise
+    # raise
