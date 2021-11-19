@@ -37,7 +37,8 @@ class VAE(Model, nn.Module):
         filter_size = 5
         pad = filter_size // 2
         encoder_hid = 32
-        h = w = 28
+        # h = w = 28
+        h = w = 32
         n_channels = 1
         self.h = h
         self.w = w
@@ -46,7 +47,7 @@ class VAE(Model, nn.Module):
         self.do_damage = do_damage
 
         self.encoder = nn.Sequential(
-            nn.Conv2d(n_channels, encoder_hid * 2 ** 0, filter_size, padding=pad + 2),
+            nn.Conv2d(n_channels, encoder_hid * 2 ** 0, filter_size, padding=pad),
             nn.ELU(),  # (bs, 32, h, w)
             nn.Conv2d(
                 encoder_hid * 2 ** 0,
@@ -128,7 +129,7 @@ class VAE(Model, nn.Module):
                 encoder_hid * 2 ** 0,
                 n_channels,
                 filter_size,
-                padding=pad + 2,
+                padding=pad,
                 # output_padding=1,
             ),
         )
@@ -208,7 +209,7 @@ class VAE(Model, nn.Module):
         else:
             logits = self.decoder(res)
 
-        return Bernoulli(logits=logits.view(-1, 28, 28))
+        return Bernoulli(logits=logits.view(-1, self.h, self.w))
 
     def damage(self, res: t.Tensor):
         b, _, h, w = res.shape
