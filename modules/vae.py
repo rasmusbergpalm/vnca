@@ -71,7 +71,7 @@ class VAE(Model):
                 IterableWrapper(val_data), batch_size=batch_size, pin_memory=True
             )
         )
-        self.train_writer, self.test_writer = get_writers("vnca")
+        self.train_writer, self.test_writer = get_writers("baseline-celebA")
 
         print(self)
         total = sum(p.numel() for p in self.parameters())
