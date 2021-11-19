@@ -88,11 +88,9 @@ decoder = nn.Sequential(
     nn.ELU(),
     nn.ConvTranspose2d(
         encoder_hid * 2 ** 0,
-        n_channels,
+        n_mixtures * 10,
         filter_size,
         padding=pad,
-        stride=2,
-        output_padding=1,
     ),
 )
 
@@ -106,7 +104,7 @@ train_data, val_data, test_data = [
     for split in ["train", "valid", "test"]
 ]
 
-vnca = VAE(
+vae = VAE(
     h,
     w,
     n_channels,
@@ -119,7 +117,8 @@ vnca = VAE(
     test_data,
     batch_size,
     dmg_size,
+    encoder_hid,
 )
-vnca.eval_batch()
-train(vnca, n_updates=100_000, eval_interval=100)
-vnca.test(128)
+vae.eval_batch()
+train(vae, n_updates=100_000, eval_interval=100)
+vae.test(128)
