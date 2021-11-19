@@ -61,7 +61,7 @@ def get_imgs(z: t.Tensor, vnca: VAENCA):
     # a dist and the states.
     _, states = vnca.decode(z)
     state = states[-1]
-    imgs = t.exp(state[:, :1, :, :])
+    imgs = t.sigmoid(state[:, :1, :, :])
 
     return imgs
 
@@ -110,11 +110,11 @@ def plot_interpolation_vnca_doubling(model, digit_1=1, digit_2=0):
 
     zs_ones = model.encode(ones_.unsqueeze(1)[:100]).mean
     zs_zeros = model.encode(zeros_.unsqueeze(1)[:100]).mean
+    idx_1 = np.random.randint(100)
+    idx_2 = np.random.randint(100)
 
     l = LinearInterpolation(16)
-    zs = l.interpolate(
-        zs_ones[np.random.randint(100)], zs_zeros[np.random.randint(100)]
-    )
+    zs = l.interpolate(zs_ones[idx_1], zs_zeros[idx_2])
     _, axes = plt.subplots(1, 16, figsize=(5 * 16, 5 * 1))
     axes = axes.flatten()
 
@@ -128,7 +128,8 @@ def plot_interpolation_vnca_doubling(model, digit_1=1, digit_2=0):
     # plt.title(name)
     plt.tight_layout()
     plt.savefig(
-        f"./data/plots/doubling_interpolation_{digit_1}_{digit_2}_final.png", dpi=100
+        f"./data/plots/doubling_interpolation_{digit_1}_idx_{idx_1}_{digit_2}_{idx_2}.png",
+        dpi=100,
     )
     # plt.show()
     plt.close()
@@ -211,7 +212,11 @@ if __name__ == "__main__":
 
     # plot_interpolation_0_1(model, name="vnca_doubling")
     # plot_interpolation_0_1(baseline, name="baseline_DC")
-    plot_interpolation_vnca_doubling(model, digit_1=1, digit_2=0)
-    plot_interpolation_vnca_doubling(model, digit_1=2, digit_2=7)
-    plot_interpolation_vnca_doubling(model, digit_1=5, digit_2=3)
+    # plot_interpolation_vnca_doubling(model, digit_1=1, digit_2=0)
+    # plot_interpolation_vnca_doubling(model, digit_1=2, digit_2=7)
+    # plot_interpolation_vnca_doubling(model, digit_1=5, digit_2=3)
     # interpolate_at_random(model)
+
+
+# put the tSNE of the baseline in the paper itself.
+# Compare with damage on CelebA.
