@@ -51,15 +51,18 @@ def get_all_static_data() -> t.Tensor:
 
 
 def load_model(w_data: bool = False) -> VAENCA:
-    vnca = VAENCA()
+    vnca = VAENCA(w_data)
     vnca.load("036578c")
 
     return vnca
 
 
 def load_baseline() -> VAE:
-    pass
-    # vae = VAE()
+    vae = VAE(load_data=False)
+    print(vae.z_dim)
+    vae.load("best_baseline_double")
+
+    return vae
 
 
 def get_imgs(z: t.Tensor, vnca: VAENCA):
@@ -108,20 +111,25 @@ def plot_interpolation_0_1(model, name="vnca"):
     plt.close()
 
 
-def plot_interpolation_vnca_doubling(model, digit_1=1, digit_2=0):
+def plot_interpolation_vnca_doubling(
+    model, digit_1=1, digit_2=0, idx_1=None, idx_2=None, name="doubling"
+):
     ShapeGuard.reset()
     imgs, labels = get_binarized_MNIST_with_labels()
+    imgs = t.nn.functional.pad(imgs, pad=[2, 2, 2, 2], mode="constant", value=0)
     ones_ = imgs[labels == digit_1]
     zeros_ = imgs[labels == digit_2]
 
     zs_ones = model.encode(ones_.unsqueeze(1)[:100]).mean
     zs_zeros = model.encode(zeros_.unsqueeze(1)[:100]).mean
-    idx_1 = np.random.randint(100)
-    idx_2 = np.random.randint(100)
+    if idx_1 is None:
+        idx_1 = np.random.randint(100)
+    if idx_2 is None:
+        idx_2 = np.random.randint(100)
 
-    l = LinearInterpolation(16)
+    l = LinearInterpolation(8)
     zs = l.interpolate(zs_ones[idx_1], zs_zeros[idx_2])
-    _, axes = plt.subplots(1, 16, figsize=(5 * 16, 5 * 1))
+    _, axes = plt.subplots(1, 8, figsize=(5 * 8, 5 * 1))
     axes = axes.flatten()
 
     ShapeGuard.reset()
@@ -134,10 +142,65 @@ def plot_interpolation_vnca_doubling(model, digit_1=1, digit_2=0):
     # plt.title(name)
     plt.tight_layout()
     plt.savefig(
-        f"./data/plots/doubling_interpolation_{digit_1}_idx_{idx_1}_{digit_2}_{idx_2}.png",
+        f"./data/plots/final_model_{digit_1}_to_{digit_2}.png",
         dpi=100,
     )
     # plt.show()
+    plt.close()
+
+
+def plot_interpolation_baseline(
+    model: VAE, digit_1=1, digit_2=0, idx_1=None, idx_2=None, name="baseline"
+):
+    ShapeGuard.reset()
+    imgs, labels = get_binarized_MNIST_with_labels()
+    imgs = t.nn.functional.pad(imgs, pad=[2, 2, 2, 2], mode="constant", value=0)
+
+    ones_ = imgs[labels == digit_1]
+    zeros_ = imgs[labels == digit_2]
+
+    zs_ones = model.encode(ones_.unsqueeze(1)[:100]).mean
+    zs_zeros = model.encode(zeros_.unsqueeze(1)[:100]).mean
+    if idx_1 is None:
+        idx_1 = np.random.randint(100)
+    if idx_2 is None:
+        idx_2 = np.random.randint(100)
+
+    l = LinearInterpolation(8)
+    zs = l.interpolate(zs_ones[idx_1], zs_zeros[idx_2])
+    _, axes = plt.subplots(1, 8, figsize=(5 * 8, 5 * 1))
+    axes = axes.flatten()
+
+    ShapeGuard.reset()
+    imgs = model.decode(zs).probs.detach().numpy()
+
+    for img, ax in zip(imgs, axes):
+        ax.imshow(img, cmap="gray", vmin=0.0, vmax=1.0)
+        ax.axis("off")
+
+    # plt.title(name)
+    plt.tight_layout()
+    plt.savefig(
+        f"./data/plots/final_baseline_{digit_1}_to_{digit_2}.png",
+        dpi=100,
+    )
+    # plt.show()
+    plt.close()
+
+
+def embed_static_data(model: VAENCA):
+    """
+    Just to check how the encodings look on the original dataset.
+    Big shame they don't come with labels.
+    """
+    encodings = model.encode(model.val_data[:5000][0]).mean.detach().numpy()
+
+    tsne = TSNE(n_components=2)
+    low_dim = tsne.fit_transform(encodings)
+
+    _, ax = plt.subplots(1, 1)
+    ax.scatter(low_dim[:, 0], low_dim[:, 1])
+    plt.show()
     plt.close()
 
 
@@ -169,9 +232,10 @@ def interpolate_at_random(model: VAENCA):
     plt.close()
 
 
-def plot_clustering(model, name="vnca", n=None):
+def plot_clustering(model, name="vnca", n=None, plot_colorbar=True):
     ShapeGuard.reset()
     imgs, labels = get_binarized_MNIST_with_labels()
+    imgs = t.nn.functional.pad(imgs, pad=[2, 2, 2, 2], mode="constant", value=0)
     labels = labels.detach().numpy()
     if n is None:
         n = 5_000  # With all points is madness.
@@ -194,33 +258,40 @@ def plot_clustering(model, name="vnca", n=None):
         vmin=np.min(labels) - 0.5,
         vmax=np.max(labels) + 0.5,
     )
-    plt.colorbar(
-        plot,
-        ax=ax,
-        ticks=np.arange(np.min(labels), np.max(labels) + 1),
-        fraction=0.046,
-        pad=0.04,
-    )
+    if plot_colorbar:
+        plt.colorbar(
+            plot,
+            ax=ax,
+            ticks=np.arange(np.min(labels), np.max(labels) + 1),
+            fraction=0.046,
+            pad=0.04,
+        )
     ax.axis("off")
     # plt.title(name)
     plt.tight_layout()
-    plt.savefig(f"./data/plots/clustering_{name}_all.png", dpi=100, bbox_inches="tight")
+    plt.savefig(f"./data/plots/clustering_{name}_{n}.png", dpi=100, bbox_inches="tight")
     plt.close()
     # raise
 
 
 if __name__ == "__main__":
-    # model = load_model()
+    model = load_model()
     baseline = load_baseline()
 
-    # plot_clustering(model, name="vnca_doubling")
-    plot_clustering(baseline, name="baseline_DC")
+    # plot_clustering(model, name="vnca_doubling", plot_colorbar=False)
+    # plot_clustering(baseline, name="baseline_DC")
+
+    # embed_static_data(model)
 
     # plot_interpolation_0_1(model, name="vnca_doubling")
     # plot_interpolation_0_1(baseline, name="baseline_DC")
-    # plot_interpolation_vnca_doubling(model, digit_1=1, digit_2=0)
-    # plot_interpolation_vnca_doubling(model, digit_1=2, digit_2=7)
-    # plot_interpolation_vnca_doubling(model, digit_1=5, digit_2=3)
+    # plot_interpolation_vnca_doubling(model, digit_1=1, digit_2=0, idx_1=99, idx_2=78)
+    plot_interpolation_vnca_doubling(model, digit_1=2, digit_2=7)
+    plot_interpolation_vnca_doubling(model, digit_1=5, digit_2=3)
+    plot_interpolation_vnca_doubling(model, digit_1=4, digit_2=8)
+    # plot_interpolation_baseline(baseline, digit_1=1, digit_2=0, idx_1=99, idx_2=78)
+    # plot_interpolation_baseline(baseline, digit_1=2, digit_2=7)
+    # plot_interpolation_baseline(baseline, digit_1=5, digit_2=3)
     # interpolate_at_random(model)
 
 

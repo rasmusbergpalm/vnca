@@ -26,7 +26,7 @@ from util import get_writers
 
 
 class VAENCA(Model, nn.Module):
-    def __init__(self):
+    def __init__(self, load_data: bool = False):
         super(Model, self).__init__()
         self.h = self.w = 32
         self.z_size = 256
@@ -119,13 +119,29 @@ class VAENCA(Model, nn.Module):
             t.ones(self.z_size, device=self.device),
         )
 
-        # data_dir = os.environ.get('DATA_DIR') or "."
-        # train_data, val_data = StaticMNIST(data_dir, 'train'), StaticMNIST(data_dir, 'val'),
-        # train_data = ConcatDataset((train_data, val_data))
-        # self.test_set = StaticMNIST(data_dir, 'test')
-        # self.train_loader = iter(DataLoader(IterableWrapper(train_data), batch_size=batch_size, pin_memory=True))
-        # self.test_loader = iter(DataLoader(IterableWrapper(self.test_set), batch_size=batch_size, pin_memory=True))
-        # self.train_writer, self.test_writer = get_writers("hierarchical-nca")
+        if load_data:
+            data_dir = os.environ.get("DATA_DIR") or "."
+            train_data, val_data = (
+                StaticMNIST(data_dir, "train"),
+                StaticMNIST(data_dir, "val"),
+            )
+            train_data = ConcatDataset((train_data, val_data))
+            self.test_set = StaticMNIST(data_dir, "test")
+            self.train_loader = iter(
+                DataLoader(
+                    IterableWrapper(train_data), batch_size=batch_size, pin_memory=True
+                )
+            )
+            self.test_loader = iter(
+                DataLoader(
+                    IterableWrapper(self.test_set),
+                    batch_size=batch_size,
+                    pin_memory=True,
+                )
+            )
+            self.train_writer, self.test_writer = get_writers("hierarchical-nca")
+
+            self.val_data = val_data
 
         print(self)
         for n, p in self.named_parameters():

@@ -29,7 +29,13 @@ def get_binarized_MNIST_with_labels() -> Tuple[t.Tensor]:
 
 
 class VAE(Model, nn.Module):
-    def __init__(self, z_dim: int = 256, batch_size: int = 32, do_damage: bool = False):
+    def __init__(
+        self,
+        z_dim: int = 256,
+        batch_size: int = 32,
+        do_damage: bool = False,
+        load_data: bool = True,
+    ):
         super().__init__()
         self.device = "cuda" if t.cuda.is_available() else "cpu"
         self.z_dim = self.z_size = z_dim
@@ -149,24 +155,25 @@ class VAE(Model, nn.Module):
         # train_data = TensorDataset(train_data, train_labels)
         # val_data = TensorDataset(val_data, val_labels)
 
-        data_dir = os.environ.get("DATA_DIR") or "data"
-        train_data, val_data, test_data = (
-            StaticMNIST(data_dir, "train"),
-            StaticMNIST(data_dir, "val"),
-            StaticMNIST(data_dir, "test"),
-        )
-        train_data = ConcatDataset((train_data, val_data))
+        if load_data:
+            data_dir = os.environ.get("DATA_DIR") or "data"
+            train_data, val_data, test_data = (
+                StaticMNIST(data_dir, "train"),
+                StaticMNIST(data_dir, "val"),
+                StaticMNIST(data_dir, "test"),
+            )
+            train_data = ConcatDataset((train_data, val_data))
 
-        self.train_loader = iter(
-            DataLoader(
-                IterableWrapper(train_data), batch_size=batch_size, pin_memory=True
+            self.train_loader = iter(
+                DataLoader(
+                    IterableWrapper(train_data), batch_size=batch_size, pin_memory=True
+                )
             )
-        )
-        self.val_loader = iter(
-            DataLoader(
-                IterableWrapper(test_data), batch_size=batch_size, pin_memory=True
+            self.val_loader = iter(
+                DataLoader(
+                    IterableWrapper(test_data), batch_size=batch_size, pin_memory=True
+                )
             )
-        )
 
         self.train_writer, self.test_writer = get_writers("baseline")
 
