@@ -28,7 +28,7 @@ def get_binarized_MNIST_with_labels() -> Tuple[t.Tensor]:
     return t.from_numpy(ims).type(t.float), t.from_numpy(labels)
 
 
-class VAE(Model):
+class VAE(Model, nn.Module):
     def __init__(self, z_dim: int = 256, batch_size: int = 32, do_damage: bool = False):
         super().__init__()
         self.device = "cuda" if t.cuda.is_available() else "cpu"
