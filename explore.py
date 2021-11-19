@@ -12,6 +12,7 @@ from shapeguard import ShapeGuard
 
 # TODO: change this.
 from vaenca import VAENCA
+from baseline import VAE
 
 
 class LinearInterpolation:
@@ -54,6 +55,11 @@ def load_model(w_data: bool = False) -> VAENCA:
     vnca.load("036578c")
 
     return vnca
+
+
+def load_baseline() -> VAE:
+    pass
+    # vae = VAE()
 
 
 def get_imgs(z: t.Tensor, vnca: VAENCA):
@@ -204,11 +210,11 @@ def plot_clustering(model, name="vnca", n=None):
 
 
 if __name__ == "__main__":
-    model = load_model()
-    # baseline = load_baseline()
+    # model = load_model()
+    baseline = load_baseline()
 
     # plot_clustering(model, name="vnca_doubling")
-    # plot_clustering(baseline, name="baseline_DC")
+    plot_clustering(baseline, name="baseline_DC")
 
     # plot_interpolation_0_1(model, name="vnca_doubling")
     # plot_interpolation_0_1(baseline, name="baseline_DC")

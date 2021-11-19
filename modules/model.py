@@ -1,5 +1,4 @@
 class Model:
-
     def train_batch(self) -> float:
         raise NotImplemented()
 
