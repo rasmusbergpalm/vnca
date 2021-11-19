@@ -143,22 +143,22 @@ class VAE(Model, nn.Module):
         ]
 
         # For overfitting testing.
-        data, labels = get_binarized_MNIST_with_labels()
-        train_data = data[:batch_size].unsqueeze(1).to(self.device)
-        train_labels = labels[:batch_size].to(self.device)
-        val_data = data[batch_size : 2 * batch_size].unsqueeze(1).to(self.device)
-        val_labels = labels[batch_size : 2 * batch_size].to(self.device)
+        # data, labels = get_binarized_MNIST_with_labels()
+        # train_data = data[:batch_size].unsqueeze(1).to(self.device)
+        # train_labels = labels[:batch_size].to(self.device)
+        # val_data = data[batch_size : 2 * batch_size].unsqueeze(1).to(self.device)
+        # val_labels = labels[batch_size : 2 * batch_size].to(self.device)
 
-        train_data = TensorDataset(train_data, train_labels)
-        test_data = TensorDataset(val_data, val_labels)
+        # train_data = TensorDataset(train_data, train_labels)
+        # test_data = TensorDataset(val_data, val_labels)
 
-        # data_dir = os.environ.get("DATA_DIR") or "data"
-        # train_data, val_data, test_data = (
-        #     StaticMNIST(data_dir, "train"),
-        #     StaticMNIST(data_dir, "val"),
-        #     StaticMNIST(data_dir, "test"),
-        # )
-        # train_data = ConcatDataset((train_data, val_data))
+        data_dir = os.environ.get("DATA_DIR") or "data"
+        train_data, val_data, test_data = (
+            StaticMNIST(data_dir, "train"),
+            StaticMNIST(data_dir, "val"),
+            StaticMNIST(data_dir, "test"),
+        )
+        train_data = ConcatDataset((train_data, val_data))
 
         self.train_loader = iter(
             DataLoader(
