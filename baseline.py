@@ -315,7 +315,7 @@ class VAE(Model, nn.Module):
 
 
 if __name__ == "__main__":
-    vae = VAE()
+    vae = VAE(batch_size=128)
     vae.eval_batch()
     train(vae, n_updates=100_000, eval_interval=50)
     # raise
