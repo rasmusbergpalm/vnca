@@ -130,7 +130,7 @@ class VAE(Model):
 
         print(total_loss / len(self.test_set))
 
-    def to_rgb(self, dist: Bernoulli):
+    def to_rgb(self, dist: DiscretizedMixtureLogitsDistribution):
         dist.sg("*chw")
         return dist.sample(), dist.mean
 
@@ -152,14 +152,37 @@ class VAE(Model):
 
         return dist
 
-    def damage(self, states):
-        states.sg("*zhw")
-        mask = t.ones_like(states)
-        for i in range(states.shape[0]):
-            h1 = random.randint(0, states.shape[2] - self.dmg_size)
-            w1 = random.randint(0, states.shape[3] - self.dmg_size)
-            mask[i, :, h1 : h1 + self.dmg_size, w1 : w1 + self.dmg_size] = 0.0
-        return states * mask
+    def damage(self, hid: t.Tensor):
+        b, _, _, w = hid.shape
+        mask = t.ones_like(hid)
+        for i in range(b):
+            # h1 = random.randint(0, h - dmg_size)
+            # w1 = random.randint(0, w - dmg_size)
+            # mask[i, :, h1 : h1 + dmg_size, w1 : w1 + dmg_size] = 0.0
+            mask[i, :, :, w // 2 :] = 0.0
+
+        return hid * mask
+
+    def damage_decode(
+        self, z: t.Tensor, layer_pos: int
+    ) -> DiscretizedMixtureLogitsDistribution:
+        z.sg("bz")
+        b, _ = z.shape
+        res_undamaged = self.decoder_linear(z).view(
+            b, self.encoder_hid * (2 ** 4), self.h // 16, self.w // 16
+        )
+        if layer_pos == 0:
+            res_damaged = self.damage(res_undamaged)
+            res = self.decoder(res_damaged)
+        else:
+            res_undamaged = self.decoder[:layer_pos](res_undamaged)
+            res_damaged = self.damage(res_undamaged)
+            res = self.decoder[layer_pos:](res_damaged)
+
+        res.sg(("*", self.n_mixtures * 10, "h", "w"))
+        dist = DiscretizedMixtureLogitsDistribution(self.n_mixtures, res)
+
+        return dist
 
     def forward(self, x: t.Tensor):
         ShapeGuard.reset()
