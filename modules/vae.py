@@ -169,7 +169,7 @@ class VAE(Model):
         z.sg("bz")
         b, _ = z.shape
         res_undamaged = self.decoder_linear(z).view(
-            b, self.encoder_hid * (2 ** 4), self.h // 16, self.w // 16
+            b, self.encoder_hid * (2 ** 5), self.h // 32, self.w // 32
         )
         if layer_pos == 0:
             res_damaged = self.damage(res_undamaged)

@@ -64,10 +64,19 @@ def load_model() -> VAE:
     )
 
     decoder_linear = nn.Sequential(
-        nn.Linear(z_size, encoder_hid * (2 ** 4) * h // 16 * w // 16)
+        nn.Linear(z_size, encoder_hid * (2 ** 5) * h // 32 * w // 32), nn.ELU()
     )
 
     decoder = nn.Sequential(
+        nn.ConvTranspose2d(
+            encoder_hid * 2 ** 5,
+            encoder_hid * 2 ** 4,
+            filter_size,
+            padding=pad,
+            stride=2,
+            output_padding=1,
+        ),
+        nn.ELU(),
         nn.ConvTranspose2d(
             encoder_hid * 2 ** 4,
             encoder_hid * 2 ** 3,
@@ -105,10 +114,7 @@ def load_model() -> VAE:
         ),
         nn.ELU(),
         nn.ConvTranspose2d(
-            encoder_hid * 2 ** 0,
-            n_mixtures * 10,
-            filter_size,
-            padding=pad,
+            encoder_hid * 2 ** 0, n_mixtures * 10, filter_size, padding=pad
         ),
     )
 
@@ -138,7 +144,7 @@ def load_model() -> VAE:
         encoder_hid,
     )
 
-    vae.load("best_celebA_64_beta_100_final")
+    vae.load("best_celebA_5_doublings")
     return vae
 
 
@@ -208,11 +214,11 @@ def unconditional_samples():
 
     # _, ax = plt.subplots(1, 1, figsize=(8 * 5, len(conv_net_positions) * 5))
     final_img = np.hstack([all_recs] + dmg_images_at_stages)
-    padding = np.ones((final_img.shape[0], 32, 3))
-    final_img = np.hstack((padding, final_img, padding))
+    # padding = np.ones((final_img.shape[0], 32, 3))
+    # final_img = np.hstack((padding, final_img, padding))
     # final_img = (final_img * 255).astype(int)
     plt.imsave(
-        "./data/plots/final_damage_celebA64_baseline_fully_trained.png", final_img
+        "./data/plots/final_damage_celebA64_baseline_5_doublings.png", final_img
     )
     # ax.imshow(final_img)
     # im = Image.fromarray(final_img, "RGB")

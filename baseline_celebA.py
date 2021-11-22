@@ -123,6 +123,7 @@ vae = VAE(
     dmg_size,
     encoder_hid,
 )
-vae.eval_batch()
-train(vae, n_updates=100_000, eval_interval=100)
+print(vae)
+# vae.eval_batch()
+# train(vae, n_updates=100_000, eval_interval=100)
 # vae.test(128)
