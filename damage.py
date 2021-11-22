@@ -144,7 +144,7 @@ def load_model() -> VAE:
         encoder_hid,
     )
 
-    vae.load("best_celebA_5_doublings")
+    vae.load("best_celebA_5_doublings_final")
     return vae
 
 
@@ -206,20 +206,21 @@ def unconditional_samples():
         i for i, net in enumerate(vae.decoder) if isinstance(net, nn.ConvTranspose2d)
     ]
     dmg_images_at_stages = []
-    for pos in conv_net_positions:
+    for pos in conv_net_positions[:-1]:  # the last one isn't an up-conv
         damaged = vae.damage_decode(zs, pos)
         dmg_images = damaged.mean.permute(0, 2, 3, 1).detach().numpy()
         dmg_images = [img for img in dmg_images]
         dmg_images_at_stages.append(np.vstack(dmg_images))
+        if pos == 0:
+            # We duplicate the first damage because they're equivalent.
+            dmg_images_at_stages.append(np.vstack(dmg_images))
 
     # _, ax = plt.subplots(1, 1, figsize=(8 * 5, len(conv_net_positions) * 5))
     final_img = np.hstack([all_recs] + dmg_images_at_stages)
     # padding = np.ones((final_img.shape[0], 32, 3))
     # final_img = np.hstack((padding, final_img, padding))
     # final_img = (final_img * 255).astype(int)
-    plt.imsave(
-        "./data/plots/final_damage_celebA64_baseline_5_doublings.png", final_img
-    )
+    plt.imsave("./data/plots/celebA64_damage_baseline_final.png", final_img)
     # ax.imshow(final_img)
     # im = Image.fromarray(final_img, "RGB")
     # im.save("./data/plots/unconditional_damage_recovery_baseline_beta_100.png")

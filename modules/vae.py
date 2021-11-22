@@ -38,6 +38,7 @@ class VAE(Model):
         batch_size: int,
         dmg_size: int,
         encoder_hid: int,
+        decoder_hid: int,
         n_mixtures: int = 1,
     ):
         super(Model, self).__init__()
@@ -50,6 +51,7 @@ class VAE(Model):
         self.n_damage = batch_size // 4
         self.dmg_size = dmg_size
         self.encoder_hid = encoder_hid
+        self.decoder_hid = decoder_hid
         self.n_mixtures = n_mixtures
 
         self.encoder = encoder
@@ -145,7 +147,7 @@ class VAE(Model):
         z.sg("bz")
         b, _ = z.shape
         res = self.decoder_linear(z).view(
-            b, self.encoder_hid * (2 ** 5), self.h // 32, self.w // 32
+            b, self.decoder_hid * (2 ** 5), self.h // 32, self.w // 32
         )
         logits = self.decoder(res).sg(("b", self.n_mixtures * 10, "h", "w"))
         dist = DiscretizedMixtureLogitsDistribution(self.n_mixtures, logits)
@@ -169,7 +171,7 @@ class VAE(Model):
         z.sg("bz")
         b, _ = z.shape
         res_undamaged = self.decoder_linear(z).view(
-            b, self.encoder_hid * (2 ** 5), self.h // 32, self.w // 32
+            b, self.decoder_hid * (2 ** 5), self.h // 32, self.w // 32
         )
         if layer_pos == 0:
             res_damaged = self.damage(res_undamaged)

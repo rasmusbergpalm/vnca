@@ -45,14 +45,16 @@ encoder = nn.Sequential(
     nn.Linear(encoder_hid * (2 ** 4) * h // 16 * w // 16, 2 * z_size),
 )
 
+decoder_hid = 10
+
 decoder_linear = nn.Sequential(
-    nn.Linear(z_size, encoder_hid * (2 ** 5) * h // 32 * w // 32), nn.ELU()
+    nn.Linear(z_size, decoder_hid * (2 ** 5) * h // 32 * w // 32), nn.ELU()
 )
 
 decoder = nn.Sequential(
     nn.ConvTranspose2d(
-        encoder_hid * 2 ** 5,
-        encoder_hid * 2 ** 4,
+        decoder_hid * 2 ** 5,
+        decoder_hid * 2 ** 4,
         filter_size,
         padding=pad,
         stride=2,
@@ -60,8 +62,8 @@ decoder = nn.Sequential(
     ),
     nn.ELU(),
     nn.ConvTranspose2d(
-        encoder_hid * 2 ** 4,
-        encoder_hid * 2 ** 3,
+        decoder_hid * 2 ** 4,
+        decoder_hid * 2 ** 3,
         filter_size,
         padding=pad,
         stride=2,
@@ -69,8 +71,8 @@ decoder = nn.Sequential(
     ),
     nn.ELU(),
     nn.ConvTranspose2d(
-        encoder_hid * 2 ** 3,
-        encoder_hid * 2 ** 2,
+        decoder_hid * 2 ** 3,
+        decoder_hid * 2 ** 2,
         filter_size,
         padding=pad,
         stride=2,
@@ -78,8 +80,8 @@ decoder = nn.Sequential(
     ),
     nn.ELU(),
     nn.ConvTranspose2d(
-        encoder_hid * 2 ** 2,
-        encoder_hid * 2 ** 1,
+        decoder_hid * 2 ** 2,
+        decoder_hid * 2 ** 1,
         filter_size,
         padding=pad,
         stride=2,
@@ -87,15 +89,15 @@ decoder = nn.Sequential(
     ),
     nn.ELU(),
     nn.ConvTranspose2d(
-        encoder_hid * 2 ** 1,
-        encoder_hid * 2 ** 0,
+        decoder_hid * 2 ** 1,
+        decoder_hid * 2 ** 0,
         filter_size,
         padding=pad,
         stride=2,
         output_padding=1,
     ),
     nn.ELU(),
-    nn.ConvTranspose2d(encoder_hid * 2 ** 0, n_mixtures * 10, filter_size, padding=pad),
+    nn.ConvTranspose2d(decoder_hid * 2 ** 0, n_mixtures * 10, filter_size, padding=pad),
 )
 
 # encoder = DataParallel(encoder)
@@ -122,8 +124,8 @@ vae = VAE(
     batch_size,
     dmg_size,
     encoder_hid,
+    decoder_hid,
 )
-print(vae)
-# vae.eval_batch()
-# train(vae, n_updates=100_000, eval_interval=100)
+vae.eval_batch()
+train(vae, n_updates=100_000, eval_interval=100)
 # vae.test(128)
