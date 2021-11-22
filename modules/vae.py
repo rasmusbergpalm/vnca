@@ -111,13 +111,13 @@ class VAE(Model):
             self.report(self.test_writer, loss)
         return loss.mean().item()
 
-    def loss(self, x, q_z_given_x, p_x_given_z):
+    def loss(self, x, q_z_given_x, p_x_given_z, beta: float = 100.0):
         rec_loss = -p_x_given_z.log_prob(x.to(self.device).squeeze(1)).sum(
             dim=(1, 2, 3)
         )  # b
         kld = kl_divergence(self.p_z, q_z_given_x).sum(dim=1)  # b
 
-        return (rec_loss + kld).mean()
+        return (rec_loss + beta * kld).mean()
 
     def test(self, n_iw_samples):
         self.train(False)
