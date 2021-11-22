@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from torch import nn
 from torchvision import transforms, datasets
+from PIL import Image
 
 from modules.vae import VAE
 
@@ -20,7 +21,7 @@ def load_model() -> VAE:
     filter_size = 5
     pad = filter_size // 2
     encoder_hid = 32
-    h = w = 32
+    h = w = 64
     n_channels = 3
 
     encoder = nn.Sequential(
@@ -137,7 +138,7 @@ def load_model() -> VAE:
         encoder_hid,
     )
 
-    vae.load("best_celebA")
+    vae.load("best_celebA_64_beta_100_final")
     return vae
 
 
@@ -173,7 +174,9 @@ def conditional_samples():
 
     plt.tight_layout()
     plt.savefig(
-        "./data/plots/damage_recovery_baseline_celebA.png", dpi=100, bbox_inches="tight"
+        "./data/plots/damage_recovery_baseline_celebA_fully_trained.png",
+        dpi=100,
+        bbox_inches="tight",
     )
     plt.show()
     plt.close()
@@ -203,17 +206,25 @@ def unconditional_samples():
         dmg_images = [img for img in dmg_images]
         dmg_images_at_stages.append(np.vstack(dmg_images))
 
-    _, ax = plt.subplots(1, 1, figsize=(8 * 5, len(conv_net_positions) * 5))
+    # _, ax = plt.subplots(1, 1, figsize=(8 * 5, len(conv_net_positions) * 5))
     final_img = np.hstack([all_recs] + dmg_images_at_stages)
-    ax.imshow(final_img)
-    ax.axis("off")
-    plt.savefig(
-        "./data/plots/unconditioned_damage_recovery_baseline.png",
-        dpi=100,
-        bbox_inches="tight",
+    padding = np.ones((final_img.shape[0], 32, 3))
+    final_img = np.hstack((padding, final_img, padding))
+    # final_img = (final_img * 255).astype(int)
+    plt.imsave(
+        "./data/plots/final_damage_celebA64_baseline_fully_trained.png", final_img
     )
-    # plt.show()
-    plt.close()
+    # ax.imshow(final_img)
+    # im = Image.fromarray(final_img, "RGB")
+    # im.save("./data/plots/unconditional_damage_recovery_baseline_beta_100.png")
+    # ax.axis("off")
+    # plt.savefig(
+    #     "./data/plots/unconditioned_damage_recovery_baseline_beta_100.png",
+    #     dpi=100,
+    #     bbox_inches="tight",
+    # )
+    # # plt.show()
+    # plt.close()
 
 
 if __name__ == "__main__":

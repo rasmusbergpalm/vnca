@@ -46,7 +46,7 @@ encoder = nn.Sequential(
 )
 
 decoder_linear = nn.Sequential(
-    nn.Linear(z_size, encoder_hid * (2 ** 4) * h // 16 * w // 16)
+    nn.Linear(z_size, encoder_hid * (2 ** 4) * h // 32 * w // 32), nn.ELU()
 )
 
 decoder = nn.Sequential(
@@ -90,7 +90,9 @@ decoder = nn.Sequential(
         encoder_hid * 2 ** 0,
         n_mixtures * 10,
         filter_size,
+        stride=2,
         padding=pad,
+        output_padding=1,
     ),
 )
 
