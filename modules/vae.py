@@ -113,7 +113,7 @@ class VAE(Model):
 
     def loss(self, x, q_z_given_x, p_x_given_z):
         rec_loss = -p_x_given_z.log_prob(x.to(self.device).squeeze(1)).sum(
-            dim=(1, 2)
+            dim=(1, 2, 3)
         )  # b
         kld = kl_divergence(self.p_z, q_z_given_x).sum(dim=1)  # b
 

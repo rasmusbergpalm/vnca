@@ -18,7 +18,7 @@ min_steps, max_steps = 64, 128
 filter_size = 5
 pad = filter_size // 2
 encoder_hid = 32
-h = w = 32
+h = w = 64
 n_channels = 3
 
 
@@ -121,4 +121,4 @@ vae = VAE(
 )
 vae.eval_batch()
 train(vae, n_updates=100_000, eval_interval=100)
-vae.test(128)
+# vae.test(128)
