@@ -111,7 +111,7 @@ class VAE(Model):
             self.report(self.test_writer, loss)
         return loss.mean().item()
 
-    def loss(self, x, q_z_given_x, p_x_given_z, beta: float = 1.0):
+    def loss(self, x, q_z_given_x, p_x_given_z, beta: float = 100.0):
         rec_loss = (
             -p_x_given_z.log_prob(x.to(self.device)).squeeze(1).sum(dim=(1, 2))
         )  # b
@@ -145,7 +145,7 @@ class VAE(Model):
         z.sg("bz")
         b, _ = z.shape
         res = self.decoder_linear(z).view(
-            b, self.encoder_hid * (2 ** 4), self.h // 32, self.w // 32
+            b, self.encoder_hid * (2 ** 5), self.h // 32, self.w // 32
         )
         logits = self.decoder(res).sg(("b", self.n_mixtures * 10, "h", "w"))
         dist = DiscretizedMixtureLogitsDistribution(self.n_mixtures, logits)

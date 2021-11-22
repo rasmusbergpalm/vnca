@@ -46,10 +46,19 @@ encoder = nn.Sequential(
 )
 
 decoder_linear = nn.Sequential(
-    nn.Linear(z_size, encoder_hid * (2 ** 4) * h // 32 * w // 32), nn.ELU()
+    nn.Linear(z_size, encoder_hid * (2 ** 5) * h // 32 * w // 32), nn.ELU()
 )
 
 decoder = nn.Sequential(
+    nn.ConvTranspose2d(
+        encoder_hid * 2 ** 5,
+        encoder_hid * 2 ** 4,
+        filter_size,
+        padding=pad,
+        stride=2,
+        output_padding=1,
+    ),
+    nn.ELU(),
     nn.ConvTranspose2d(
         encoder_hid * 2 ** 4,
         encoder_hid * 2 ** 3,
@@ -86,14 +95,7 @@ decoder = nn.Sequential(
         output_padding=1,
     ),
     nn.ELU(),
-    nn.ConvTranspose2d(
-        encoder_hid * 2 ** 0,
-        n_mixtures * 10,
-        filter_size,
-        stride=2,
-        padding=pad,
-        output_padding=1,
-    ),
+    nn.ConvTranspose2d(encoder_hid * 2 ** 0, n_mixtures * 10, filter_size, padding=pad),
 )
 
 # encoder = DataParallel(encoder)
