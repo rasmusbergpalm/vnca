@@ -186,7 +186,9 @@ class VNCA(Model):
                 recovered = self.nca(dmg)
                 states = states + [dmg] + recovered
 
-        t.save({'states': states}, 'states.t')
+            means = [self.to_rgb(state)[1] for state in states]
+
+        t.save({'means': means}, 'means.t')
 
     def report(self, writer: SummaryWriter, recon_states, loss, recon_loss, kl_loss):
         writer.add_scalar('loss', loss.mean().item(), self.batch_idx)
