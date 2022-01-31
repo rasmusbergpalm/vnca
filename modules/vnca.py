@@ -1,5 +1,5 @@
 import random
-from typing import Sequence, Tuple
+from typing import List
 
 import numpy as np
 import torch as t
@@ -49,7 +49,7 @@ class VNCA(Model):
         self.dmg_size = dmg_size
 
         self.encoder = encoder
-        self.nca = NCA(update_net, 32, 64, 0.5)
+        self.nca = NCA(update_net, 64, 64, 0.5)
         self.p_z = Normal(t.zeros(self.z_size, device=self.device), t.ones(self.z_size, device=self.device))
 
         self.test_set = test_data
@@ -114,7 +114,7 @@ class VNCA(Model):
         logsigma = q[:, self.z_size:].sg("Bz")
         return Normal(loc=loc, scale=t.exp(logsigma))
 
-    def decode(self, z: t.Tensor) -> Tuple[Distribution, Sequence[t.Tensor]]:  # p(x|z)
+    def decode(self, z: t.Tensor) -> List[t.Tensor]:  # p(x|z)
         z.sg("bzhw")
         return self.nca(z)
 
@@ -177,6 +177,17 @@ class VNCA(Model):
 
         return loss, z, p_x_given_z, recon_loss, kl_loss, states
 
+    def twitter_gif(self):
+        with t.no_grad():
+            samples = self.p_z.sample((64,)).view(64, -1, 1, 1).expand(64, -1, self.h, self.w).to(self.device)
+            states = self.decode(samples)  # n,bchw
+            for i in range(5):
+                dmg = self.damage(states[-1])
+                recovered = self.nca(dmg)
+                states = states + [dmg] + recovered
+
+        t.save({'states': states}, 'states.t')
+
     def report(self, writer: SummaryWriter, recon_states, loss, recon_loss, kl_loss):
         writer.add_scalar('loss', loss.mean().item(), self.batch_idx)
         writer.add_scalar('bpd', loss.mean().item() / (np.log(2) * self.n_channels * self.h * self.w), self.batch_idx)
@@ -190,7 +201,7 @@ class VNCA(Model):
         ShapeGuard.reset()
         with t.no_grad():
             # samples
-            samples = self.p_z.sample((8,)).view(8, -1, 1, 1).expand(8, -1, self.h, self.w).to(self.device)
+            samples = self.p_z.sample((64,)).view(64, -1, 1, 1).expand(64, -1, self.h, self.w).to(self.device)
             states = self.decode(samples)
             samples, samples_means = self.to_rgb(states[-1])
             writer.add_images("samples/samples", samples, self.batch_idx)

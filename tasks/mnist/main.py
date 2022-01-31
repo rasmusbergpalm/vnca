@@ -48,6 +48,6 @@ if __name__ == "__main__":
 
     vnca = VNCA(h, w, n_channels, z_size, encoder, update_net, train_data, test_data, test_data, state_to_dist, batch_size, dmg_size)
     vnca.load('../8687209/latest')
-    vnca.eval_batch()
+    vnca.twitter_gif()
     # train(vnca, n_updates=100_000, eval_interval=100)
     # vnca.test(128)
