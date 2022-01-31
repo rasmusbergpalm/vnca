@@ -49,7 +49,7 @@ class VNCA(Model):
         self.dmg_size = dmg_size
 
         self.encoder = encoder
-        self.nca = NCA(update_net, 64, 64, 0.5)
+        self.nca = NCA(update_net, 32, 32, 0.5)
         self.p_z = Normal(t.zeros(self.z_size, device=self.device), t.ones(self.z_size, device=self.device))
 
         self.test_set = test_data
