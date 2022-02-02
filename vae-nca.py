@@ -4,6 +4,7 @@ from typing import Sequence, Tuple
 import numpy as np
 import torch as t
 import torch.utils.data
+import tqdm
 from PIL import Image
 from shapeguard import ShapeGuard
 from torch import nn, optim
@@ -176,7 +177,12 @@ class VAENCA(Model, nn.Module):
         return samples, recons, growth
 
     def to_rgb(self, state):
-        return (DiscretizedMixtureLogitsDistribution(self.n_mixtures, state[:, :self.n_mixtures * 10, :, :]).sample() + 1) / 2
+        samples = []
+        dml = DiscretizedMixtureLogitsDistribution(self.n_mixtures, state[:, :self.n_mixtures * 10, :, :])
+        for _ in range(1000):
+            samples.append((dml.sample() + 1) / 2)
+
+        return t.stack(samples, dim=0).mean(dim=0)
 
     def plot_growth_samples(self):
         ShapeGuard.reset()
@@ -282,11 +288,20 @@ class VAENCA(Model, nn.Module):
         reconstruction_loss = -logpx_given_z.mean()
         kl_loss = kld.mean()
 
-        loss = reconstruction_loss + 100*kl_loss
+        loss = reconstruction_loss + 100 * kl_loss
         return loss, reconstruction_loss, kl_loss  # (1,)
+
+    def twitter_gif(self):
+        with t.no_grad():
+            samples = self.p_z.sample((64,)).view(64, 1, -1).to(self.device)
+            dml, states = self.decode(samples)  # n,bchw
+
+            means = [self.to_rgb(state) for state in tqdm.tqdm(states)]
+
+        t.save({'means': means}, 'means.t')
 
 
 if __name__ == "__main__":
     model = VAENCA()
-    model.eval_batch()
-    train(model, n_updates=100_000, eval_interval=100)
+    model.load('../8d1ee6e/latest')
+    model.twitter_gif()
