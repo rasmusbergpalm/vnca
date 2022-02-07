@@ -2,6 +2,10 @@
 
 Code for the paper [Variational Neural Cellular Automata](https://arxiv.org/abs/2201.12360).
 
+![VNCA generating faces](celeb.gif)
+
+![VNCA re-generating digits](mnist.gif)
+
 
 ## Cite
 ```
