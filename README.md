@@ -1,5 +1,17 @@
 # Variational Neural Cellular Automata
 
+Code for the paper [Variational Neural Cellular Automata](https://arxiv.org/abs/2201.12360).
+
+
+## Cite
+```
+@inproceedings{palm2022variational,
+  title={Variational Neural Cellular Automata},
+  author={Palm, Rasmus Berg and Gonz{\'a}lez-Duque, Miguel and Sudhakaran, Shyam and Risi, Sebastian},
+  booktitle = {10th International Conference on Learning Representations, {ICLR} 2022},
+  year={2022}
+}
+```
 
 ## Experiments
 
